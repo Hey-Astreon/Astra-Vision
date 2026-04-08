@@ -1,0 +1,82 @@
+{
+  "summary": "Completed testing of Astra Vision AI integration. Backend APIs work perfectly locally with correct {success: true, data: {...}} wrapper format, but entire application deployment is down. Frontend shows 'Preview Unavailable' error.",
+  
+  "backend_issues": {
+    "critical_bugs": [
+      {
+        "endpoint": "All endpoints",
+        "issue": "Entire application deployment is down - external URL shows 'Preview Unavailable' error",
+        "impact": "Complete application failure - no access to frontend or backend through public URL",
+        "fix_priority": "CRITICAL",
+        "details": "Application needs to be restarted/redeployed. Backend works perfectly locally but is not accessible externally."
+      }
+    ],
+    "working_locally": [
+      {
+        "endpoint": "/api/health",
+        "status": "✅ Working - Returns correct health status",
+        "response_format": "Correct JSON with status and service fields"
+      },
+      {
+        "endpoint": "/api/explain-code",
+        "status": "✅ Working - Returns {success: true, data: {overview, key_parts, summary}}",
+        "response_format": "Perfect wrapper format implementation"
+      },
+      {
+        "endpoint": "/api/explain-error", 
+        "status": "✅ Working - Returns {success: true, data: {meaning, cause, fix}}",
+        "response_format": "Perfect wrapper format implementation"
+      },
+      {
+        "endpoint": "/api/generate-flow",
+        "status": "✅ Working - Returns {success: true, data: {diagram}}",
+        "response_format": "Perfect wrapper format implementation"
+      }
+    ]
+  },
+
+  "frontend_issues": {
+    "critical_bugs": [
+      {
+        "component": "Entire Application",
+        "issue": "Application deployment is down - shows 'Preview Unavailable!!!' error",
+        "impact": "Complete frontend failure - no access to application",
+        "fix_priority": "CRITICAL",
+        "details": "External URL returns deployment error page instead of the React application"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "All AI functionality",
+        "issue": "Cannot test frontend-backend integration due to deployment failure",
+        "affected_selectors": ["All UI elements"],
+        "fix_priority": "CRITICAL",
+        "details": "Frontend is not accessible to test integration with backend APIs"
+      }
+    ]
+  },
+
+  "passed_tests": [
+    "Backend health endpoint works locally (100%)",
+    "Backend explain-code endpoint returns correct {success: true, data: {...}} format locally",
+    "Backend explain-error endpoint returns correct {success: true, data: {...}} format locally", 
+    "Backend generate-flow endpoint returns correct {success: true, data: {...}} format locally",
+    "All backend error handling works correctly (400 status for empty inputs)",
+    "Backend wrapper format matches requirements exactly"
+  ],
+
+  "test_report_links": ["/app/backend_test.py"],
+
+  "action_item_for_main_agent": "CRITICAL: Application deployment is completely down. The external URL shows 'Preview Unavailable!!!' error message. Need to restart/redeploy the entire application through the deployment platform. Backend code is perfect and ready - the issue is infrastructure/deployment related. Visit app.emergent.sh to restart the application as suggested by the error message.",
+
+  "updated_files": ["/app/backend_test.py"],
+
+  "success_percentage": {
+    "backend": "100% (locally), 0% (external - deployment down)",
+    "frontend": "0% (deployment down)",
+    "integration": "0% (cannot test due to deployment failure)"
+  },
+
+  "should_call_test_agent_after_fix": "true",
+  "should_main_agent_test_itself": "false"
+}

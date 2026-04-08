@@ -1,0 +1,92 @@
+{
+  "summary": "Attempted to test Astra Vision demo mode functionality but encountered critical deployment issue. Application shows 'Preview Unavailable!!!' error on external URL, preventing all frontend and integration testing. Backend APIs work perfectly locally but are inaccessible externally.",
+  
+  "backend_issues": {
+    "critical_bugs": [
+      {
+        "endpoint": "All external endpoints",
+        "issue": "External URL returns 404 for all API endpoints while backend works locally",
+        "impact": "Complete external API failure - no access to backend through public URL",
+        "fix_priority": "CRITICAL",
+        "details": "Backend server is running (supervisor shows RUNNING status) and responds correctly to local requests (curl localhost:8001/api/health works), but external URL https://ai-dev-brain-cferxrtx.preview.emergentagent.com/api/* returns 404. This suggests routing/proxy configuration issue."
+      }
+    ],
+    "working_locally": [
+      {
+        "endpoint": "/api/health",
+        "status": "✅ Working locally - Returns correct health status",
+        "response_format": "Correct JSON with status and service fields"
+      },
+      {
+        "endpoint": "All API endpoints",
+        "status": "✅ Backend server running and accessible locally",
+        "details": "Supervisor logs show successful API calls with 200/400 responses as expected"
+      }
+    ]
+  },
+
+  "frontend_issues": {
+    "critical_bugs": [
+      {
+        "component": "Entire Application",
+        "issue": "Application deployment shows 'Preview Unavailable!!!' error page",
+        "impact": "Complete frontend failure - cannot access React application",
+        "fix_priority": "CRITICAL",
+        "details": "External URL shows deployment error: 'Our Agent is resting after inactivity. Visit app.emergent.sh and restart the app to wake it up and restore your preview.' Cannot test demo mode functionality, Try Demo Repository button, file tree, Monaco editor, or any AI features."
+      }
+    ],
+    "untested_features": [
+      {
+        "feature": "Try Demo Repository button",
+        "status": "❌ Cannot test - application not accessible",
+        "selector": "[data-testid='try-demo-btn']"
+      },
+      {
+        "feature": "Demo mode file tree (src/app.js, src/utils.js, package.json)",
+        "status": "❌ Cannot test - application not accessible",
+        "selector": "[data-testid='file-tree']"
+      },
+      {
+        "feature": "Demo mode indicator",
+        "status": "❌ Cannot test - application not accessible",
+        "selector": "[data-testid='demo-mode-indicator']"
+      },
+      {
+        "feature": "Monaco editor with demo file content",
+        "status": "❌ Cannot test - application not accessible"
+      },
+      {
+        "feature": "AI buttons (Explain Code, Explain Error, Generate Flow) with demo content",
+        "status": "❌ Cannot test - application not accessible",
+        "selectors": ["[data-testid='explain-code-btn']", "[data-testid='explain-error-btn']", "[data-testid='generate-flow-btn']"]
+      },
+      {
+        "feature": "GitHub API fallback to demo mode",
+        "status": "❌ Cannot test - application not accessible"
+      }
+    ]
+  },
+
+  "passed_tests": [
+    "Backend server is running locally (supervisor status: RUNNING)",
+    "Backend health endpoint works locally (curl localhost:8001/api/health)",
+    "Backend logs show successful API responses locally",
+    "All required demo mode code is present in App.js (MOCK_REPO_FILES, MOCK_REPO_TREE, loadDemoRepo function)"
+  ],
+
+  "test_report_links": ["/app/backend_test.py"],
+
+  "action_item_for_main_agent": "CRITICAL: Application deployment is down. External URL shows 'Preview Unavailable!!!' error. Backend works locally but external routing is broken (404 for all API calls). Need to restart/fix the application deployment immediately. Cannot test any demo mode functionality until deployment is restored. Visit app.emergent.sh to restart the app as suggested by the error message.",
+
+  "updated_files": ["/app/backend_test.py"],
+
+  "success_percentage": {
+    "backend": "100% (locally), 0% (external - deployment/routing issue)",
+    "frontend": "0% (deployment down - cannot access)",
+    "integration": "0% (cannot test due to deployment failure)",
+    "demo_mode": "0% (cannot test - application inaccessible)"
+  },
+
+  "should_call_test_agent_after_fix": "true",
+  "should_main_agent_test_itself": "false"
+}

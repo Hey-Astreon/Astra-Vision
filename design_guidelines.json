@@ -1,0 +1,121 @@
+{
+  "theme": "dark",
+  "archetype": "4 (Swiss & High-Contrast - Developer Tools Variant)",
+  "description": "Classic VS Code dark theme tailored for an AI dev brain dashboard. Prioritizes ergonomic usability, high contrast, and dense data presentation. No pure blacks, using layered dark grays with VS Code blue accents.",
+  "typography": {
+    "font_family": {
+      "headings": "JetBrains Mono, monospace",
+      "body": "IBM Plex Sans, sans-serif",
+      "code": "JetBrains Mono, monospace"
+    },
+    "scales": {
+      "h1": "text-2xl font-bold tracking-tight",
+      "h2": "text-xl font-semibold tracking-tight",
+      "h3": "text-lg font-medium",
+      "body": "text-sm leading-relaxed",
+      "code": "text-xs md:text-sm leading-normal",
+      "small": "text-xs tracking-wider"
+    }
+  },
+  "colors": {
+    "background": {
+      "main": "#1e1e1e",
+      "sidebar": "#252526",
+      "panel": "#2d2d2d",
+      "activity_bar": "#333333",
+      "input": "#3c3c3c"
+    },
+    "text": {
+      "primary": "#cccccc",
+      "heading": "#ffffff",
+      "muted": "#858585",
+      "placeholder": "#6b6b6b"
+    },
+    "border": {
+      "default": "#3c3c3c",
+      "focus": "#007acc",
+      "subtle": "#2b2d2e"
+    },
+    "brand": {
+      "primary": "#007acc",
+      "primary_hover": "#005f9e",
+      "secondary": "#4ec9b0",
+      "warning": "#d7ba7d",
+      "danger": "#f14c4c",
+      "string": "#ce9178"
+    },
+    "states": {
+      "hover": "#2a2d2e",
+      "selected": "#37373d",
+      "active_tab": "#1e1e1e",
+      "inactive_tab": "#2d2d2d"
+    }
+  },
+  "spacing_and_layout": {
+    "global_layout": "h-screen flex overflow-hidden bg-[#1e1e1e] text-[#cccccc]",
+    "left_sidebar": "w-72 flex-shrink-0 border-r border-[#3c3c3c] bg-[#252526] flex flex-col",
+    "center_panel": "flex-1 flex flex-col min-w-0 bg-[#1e1e1e]",
+    "right_sidebar": "w-96 flex-shrink-0 border-l border-[#3c3c3c] bg-[#252526] flex flex-col overflow-y-auto",
+    "padding": {
+      "container": "p-4",
+      "dense": "p-2",
+      "spacious": "p-6"
+    },
+    "border_radius": "rounded-sm",
+    "shadows": "shadow-none"
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#007acc] text-white hover:bg-[#005f9e] transition-colors rounded-sm px-4 py-2 font-medium text-sm data-[testid='primary-btn']",
+      "secondary": "bg-[#3c3c3c] text-[#cccccc] hover:bg-[#4d4d4d] transition-colors rounded-sm px-4 py-2 text-sm",
+      "icon": "text-[#858585] hover:text-[#cccccc] transition-colors p-1 rounded-sm hover:bg-[#3c3c3c]"
+    },
+    "inputs": {
+      "default": "bg-[#3c3c3c] border border-transparent text-[#cccccc] placeholder-[#6b6b6b] focus:border-[#007acc] focus:outline-none focus:ring-1 focus:ring-[#007acc] rounded-sm px-3 py-1.5 text-sm w-full transition-colors"
+    },
+    "file_tree": {
+      "container": "flex-1 overflow-y-auto py-2 text-sm font-mono",
+      "item": "flex items-center gap-2 px-4 py-1 cursor-pointer hover:bg-[#2a2d2e] hover:text-white transition-colors group",
+      "selected": "bg-[#37373d] text-white",
+      "icon_color": "text-[#d7ba7d]",
+      "folder_color": "text-[#cccccc]"
+    },
+    "tabs": {
+      "container": "flex overflow-x-auto bg-[#252526] border-b border-[#3c3c3c] scrollbar-none",
+      "tab": "flex items-center gap-2 px-4 py-2 border-r border-[#3c3c3c] cursor-pointer text-sm font-mono min-w-fit",
+      "active": "bg-[#1e1e1e] text-white border-t-2 border-t-[#007acc]",
+      "inactive": "bg-[#2d2d2d] text-[#858585] hover:bg-[#2a2d2e]"
+    },
+    "panels": {
+      "card": "bg-[#1e1e1e] border border-[#3c3c3c] rounded-sm p-4",
+      "header": "text-xs font-mono text-[#858585] uppercase tracking-[0.2em] mb-3"
+    },
+    "scrollbar": "scrollbar-thin scrollbar-thumb-[#424242] scrollbar-track-transparent hover:scrollbar-thumb-[#4f4f4f]"
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "instructions": "Use Phosphor Icons for a dense, developer-focused look. Regular weight. Folder, FileCode, GithubLogo, Bug, TreeStructure, Info."
+  },
+  "motion": {
+    "hover": "transition-colors duration-150 ease-in-out",
+    "focus": "transition-all duration-150",
+    "tree_collapse": "transition-all duration-200 ease-in-out"
+  },
+  "illustrations_and_media": {
+    "empty_state": "Do not use images. Use high-quality SVG Phosphor icons (e.g., FileCode or GithubLogo) sized at 64px, colored in #3c3c3c, to indicate empty states.",
+    "logos": "Use text-based logo 'Astra Vision' in JetBrains Mono, font-bold, text-white with an adjacent Phosphor icon (e.g., Graph)."
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the dark theme colors defined. Avoid Shadcn's default zinc/slate tailwind colors. Use the hex codes provided via custom Tailwind config.",
+    "Install `@phosphor-icons/react` for all iconography.",
+    "Configure Tailwind with the custom colors (e.g., vscode-bg: '#1e1e1e', vscode-sidebar: '#252526').",
+    "Add 'JetBrains Mono' and 'IBM Plex Sans' to your fonts in index.html.",
+    "The UI is a fixed 3-pane layout taking up 100vh. Ensure `overflow-hidden` on the body/root and use `overflow-y-auto` only inside the specific panels (File tree, Monaco Editor wrapper, AI explanation right sidebar).",
+    "Left Sidebar (w-72): Contains a fixed header with the GitHub Repo input, and a scrollable body for the File Explorer Tree. Tree items must use 'hover:bg-[#2a2d2e]' and selected state 'bg-[#37373d]'.",
+    "Center Panel (flex-1): Contains a Tab bar at the top (active tab has top border '#007acc' and background '#1e1e1e'). Monaco Code Viewer sits below taking remaining height.",
+    "Right Panel (w-96): Contains sections for 'Code Explanation', 'Error Debug', and 'Mermaid Flow Diagram'. Use subtle borders ('#3c3c3c') to separate these sections vertically. Use uppercase tracking-wider headers.",
+    "Ensure all interactive elements have `data-testid` attributes (e.g., `data-testid='repo-input'`, `data-testid='fetch-repo-btn'`, `data-testid='file-node'`).",
+    "Do not use card rounded corners larger than `rounded-sm`. The VS Code aesthetic is sharp and rectangular.",
+    "Apply custom thin scrollbar classes across all scrollable areas."
+  ]
+}
