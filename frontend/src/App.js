@@ -516,11 +516,7 @@ function App() {
       
       const result = explainCode(fileContent);
       
-      setCodeExplanation({
-        overview: result.overview,
-        key_parts: result.keyPoints.join('\n• '),
-        summary: result.summary
-      });
+      setCodeExplanation(result);
     } catch (error) {
       console.error('Error explaining code:', error);
       setCodeExplanation({ error: 'Something went wrong. Try again.' });
@@ -793,16 +789,80 @@ function App() {
             {codeExplanation && !codeExplanation.error && (
               <div className="explanation-section space-y-3 text-sm">
                 <div>
-                  <h4 className="text-vscode-secondary font-medium mb-1">Overview</h4>
-                  <p className="text-vscode-text leading-relaxed">{codeExplanation.overview}</p>
+                  <h4 className="text-vscode-secondary font-medium mb-1 uppercase text-[10px] tracking-widest">Astra Overview</h4>
+                  <p className="text-vscode-text leading-relaxed italic border-l-2 border-vscode-primary pl-3 mb-4">{codeExplanation.overview}</p>
                 </div>
-                <div>
-                  <h4 className="text-vscode-secondary font-medium mb-1">Key Parts</h4>
-                  <p className="text-vscode-text leading-relaxed">{codeExplanation.key_parts}</p>
-                </div>
-                <div>
-                  <h4 className="text-vscode-secondary font-medium mb-1">Summary</h4>
-                  <p className="text-vscode-text leading-relaxed">{codeExplanation.summary}</p>
+
+                {codeExplanation.breakdown && codeExplanation.breakdown.length > 0 && (
+                  <div>
+                    <h4 className="text-vscode-secondary font-medium mb-1 flex items-center gap-1">
+                      <TreeStructure size={14} /> Logic Flow
+                    </h4>
+                    <div className="space-y-2 mb-4">
+                      {codeExplanation.breakdown.map((step, i) => (
+                        <div key={i} className="flex gap-2">
+                          <span className="text-vscode-primary font-bold opacity-50">{i + 1}.</span>
+                          <p className="text-vscode-text">{step}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {codeExplanation.reasoning && (
+                  <div className="mb-4">
+                    <h4 className="text-vscode-secondary font-medium mb-1">Architect's Reasoning</h4>
+                    <p className="text-vscode-text leading-relaxed bg-vscode-input p-2 rounded-sm border border-vscode-border">{codeExplanation.reasoning}</p>
+                  </div>
+                )}
+
+                {codeExplanation.analogy && (
+                  <div className="bg-vscode-primary/10 p-3 rounded-sm border border-vscode-primary/20 mb-4">
+                    <h4 className="text-vscode-primary font-bold text-xs uppercase tracking-widest mb-1 flex items-center gap-1">
+                      <Lightning size={12} weight="fill" />
+                      Visual Analogy
+                    </h4>
+                    <p className="text-vscode-text leading-relaxed font-medium">{codeExplanation.analogy}</p>
+                  </div>
+                )}
+
+                {codeExplanation.keyConcepts && codeExplanation.keyConcepts.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-vscode-secondary font-medium mb-1">Key Concepts</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {codeExplanation.keyConcepts.map((concept, i) => (
+                        <span key={i} className="bg-vscode-selected px-2 py-0.5 rounded-sm text-[10px] text-white">
+                          {concept}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {codeExplanation.commonMistakes && codeExplanation.commonMistakes.length > 0 && (
+                  <div className="p-3 rounded-sm border border-vscode-danger/30 bg-vscode-danger/5 mb-4">
+                    <h4 className="text-vscode-danger font-bold text-xs uppercase tracking-widest mb-1 flex items-center gap-1">
+                      <Warning size={12} weight="fill" />
+                      Common Pitfalls
+                    </h4>
+                    <div className="space-y-1">
+                      {codeExplanation.commonMistakes.map((mistake, i) => (
+                        <p key={i} className="text-vscode-text text-sm">• {mistake}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {codeExplanation.realWorldUsage && (
+                  <div className="mb-4">
+                    <h4 className="text-vscode-secondary font-medium mb-1 uppercase text-[10px] tracking-widest">Real-World Case</h4>
+                    <p className="text-vscode-text leading-relaxed text-xs opacity-80">{codeExplanation.realWorldUsage}</p>
+                  </div>
+                )}
+
+                <div className="border-t border-vscode-border pt-3">
+                  <h4 className="text-vscode-secondary font-medium mb-1">Final Summary</h4>
+                  <p className="text-vscode-text leading-relaxed font-bold">{codeExplanation.summary}</p>
                 </div>
               </div>
             )}
