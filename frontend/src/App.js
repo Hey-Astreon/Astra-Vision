@@ -23,7 +23,7 @@ import {
   X
 } from '@phosphor-icons/react';
 import './App.css';
-import { explainCode } from './utils/analysisEngine';
+import { explainCode, parseCode, analyzeCode, generateDiagram } from './utils/analysisEngine';
 
 // Local Mock AI Logic
 
@@ -92,25 +92,59 @@ const MOCK_REPO_TREE = [
   }
 ];
 
-// Initialize mermaid
+// Initialize mermaid with specific VSCode/Dark theme configuration
 mermaid.initialize({
   startOnLoad: false,
   theme: 'dark',
-  themeVariables: {
-    primaryColor: '#007acc',
-    primaryTextColor: '#ffffff',
-    primaryBorderColor: '#3c3c3c',
-    lineColor: '#858585',
-    secondaryColor: '#2d2d2d',
-    tertiaryColor: '#252526',
-    background: '#1e1e1e',
-    mainBkg: '#2d2d2d',
-    nodeBorder: '#3c3c3c',
-    clusterBkg: '#252526',
-    titleColor: '#ffffff',
-    edgeLabelBackground: '#2d2d2d',
-  }
+  securityLevel: 'loose',
+  flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' }
 });
+
+/**
+ * Visual Teaching System: Mermaid Diagram Component
+ * Handles manual rendering and re-rendering of diagrams for high stability.
+ */
+const MermaidDiagram = ({ chart }) => {
+  const [svg, setSvg] = useState('');
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!chart) return;
+
+    const renderDiagram = async () => {
+      try {
+        setError(null);
+        // Requirement: Unique ID per render to prevent collisions
+        const id = "diagram-" + Date.now();
+        // Requirement: Manual render() call
+        const { svg: renderedSvg } = await mermaid.render(id, chart);
+        setSvg(renderedSvg);
+      } catch (err) {
+        console.error("Mermaid Render Error:", err);
+        setError("Unable to render diagram. Showing simplified flow.");
+      }
+    };
+
+    renderDiagram();
+  }, [chart]);
+
+  if (error) {
+    return (
+      <div className="p-3 border border-vscode-danger/30 bg-vscode-danger/5 text-vscode-danger text-[10px] italic rounded-sm mb-4">
+        {error}
+      </div>
+    );
+  }
+
+  if (!svg) return null;
+
+  return (
+    <div 
+      className="mermaid-container bg-vscode-input p-4 rounded-sm border border-vscode-border overflow-x-auto flex justify-center mb-4 transition-all duration-300"
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
+};
 
 // File icon component
 const FileIcon = ({ filename, isFolder, isOpen }) => {
@@ -231,49 +265,6 @@ const TreeNode = ({ node, level = 0, selectedFile, onSelectFile, expandedFolders
   );
 };
 
-// Mermaid diagram component
-const MermaidDiagram = ({ chart }) => {
-  const containerRef = useRef(null);
-  const [svg, setSvg] = useState('');
-  const [error, setError] = useState(null);
-  
-  useEffect(() => {
-    if (!chart) return;
-    
-    const renderDiagram = async () => {
-      try {
-        setError(null);
-        const id = `mermaid-${Date.now()}`;
-        const { svg } = await mermaid.render(id, chart);
-        setSvg(svg);
-      } catch (err) {
-        console.error('Mermaid error:', err);
-        setError('Failed to render diagram');
-      }
-    };
-    
-    renderDiagram();
-  }, [chart]);
-  
-  if (error) {
-    return (
-      <div className="text-vscode-danger text-sm p-2">
-        <Warning size={16} className="inline mr-2" />
-        {error}
-      </div>
-    );
-  }
-  
-  if (!svg) return null;
-  
-  return (
-    <div 
-      ref={containerRef}
-      className="mermaid-container overflow-auto p-2"
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
-  );
-};
 
 // Loading spinner component
 const Spinner = ({ size = 20 }) => (
@@ -305,6 +296,7 @@ function App() {
   
   // AI responses
   const [codeExplanation, setCodeExplanation] = useState(null);
+  const [diagramCode, setDiagramCode] = useState('');
   const [errorExplanation, setErrorExplanation] = useState(null);
   const [flowDiagram, setFlowDiagram] = useState(null);
   
@@ -355,6 +347,7 @@ function App() {
     setCodeExplanation(null);
     setErrorExplanation(null);
     setFlowDiagram(null);
+    setDiagramCode('');
     setIsDemoMode(false);
     
     try {
@@ -499,9 +492,8 @@ function App() {
     });
   };
   
-  // Explain code - Mock Local Logic
+  // Explain code - Visual Teaching Engine Refinement
   const handleExplainCode = async () => {
-    // GUARANTEE VALID INPUT - single source of truth
     if (!fileContent || fileContent.trim() === '') {
       setCodeExplanation({ error: 'No code loaded. Please select a file first.' });
       return;
@@ -509,17 +501,25 @@ function App() {
     
     setLoadingExplain(true);
     setCodeExplanation(null);
+    setDiagramCode('');
     
     try {
-      // Simulate slight processing delay
-      await new Promise(r => setTimeout(r, 500));
+      // Simulate slight processing delay for "thinking" feel
+      await new Promise(r => setTimeout(r, 400));
       
+      // End-to-End Orchestrator Call
       const result = explainCode(fileContent);
+      console.log("Explain Output:", result);
+
+      if (!result) {
+        throw new Error("Empty result from analysis engine");
+      }
       
       setCodeExplanation(result);
+      setDiagramCode(result.diagram || '');
     } catch (error) {
-      console.error('Error explaining code:', error);
-      setCodeExplanation({ error: 'Something went wrong. Try again.' });
+      console.error('Error in Teaching Engine:', error);
+      setCodeExplanation({ error: 'Something went wrong during analysis.' });
     } finally {
       setLoadingExplain(false);
     }
@@ -789,17 +789,34 @@ function App() {
             {codeExplanation && !codeExplanation.error && (
               <div className="explanation-section space-y-3 text-sm">
                 <div>
-                  <h4 className="text-vscode-secondary font-medium mb-1 uppercase text-[10px] tracking-widest">Astra Overview</h4>
-                  <p className="text-vscode-text leading-relaxed italic border-l-2 border-vscode-primary pl-3 mb-4">{codeExplanation.overview}</p>
+                <div className="flex items-center justify-between gap-2 mb-4">
+                  <div>
+                    <h4 className="text-vscode-secondary font-medium mb-1 uppercase text-[10px] tracking-widest">Astra Overview</h4>
+                    <p className="text-vscode-text leading-relaxed italic border-l-2 border-vscode-primary pl-3">{codeExplanation.overview}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                  <div className="flex flex-wrap gap-2">
+                    {(codeExplanation.difficulty || codeExplanation.difficultyLevel) && (
+                      <div className={`px-2 py-1 rounded-sm text-[10px] font-bold uppercase tracking-tighter border ${(codeExplanation.difficulty || codeExplanation.difficultyLevel) === 'basic' ? 'bg-vscode-primary/10 text-vscode-primary border-vscode-primary/30' : 'bg-vscode-secondary/10 text-vscode-secondary border-vscode-secondary/30'}`}>
+                        {(codeExplanation.difficulty || codeExplanation.difficultyLevel)}
+                      </div>
+                    )}
+                    {codeExplanation.confidenceLevel && (
+                      <div className={`px-2 py-0.5 rounded-sm text-[8px] font-bold uppercase tracking-widest border border-vscode-border/40 ${codeExplanation.confidenceLevel === 'high' ? 'bg-green-500/10 text-green-500' : codeExplanation.confidenceLevel === 'medium' ? 'bg-yellow-500/10 text-yellow-500' : 'bg-vscode-danger/10 text-vscode-danger'}`}>
+                        Confidence: {codeExplanation.confidenceLevel}
+                      </div>
+                    )}
+                  </div>
+                </div>
                 </div>
 
-                {codeExplanation.breakdown && codeExplanation.breakdown.length > 0 && (
+                {(codeExplanation.flow || codeExplanation.breakdown) && (codeExplanation.flow || codeExplanation.breakdown).length > 0 && (
                   <div>
                     <h4 className="text-vscode-secondary font-medium mb-1 flex items-center gap-1">
                       <TreeStructure size={14} /> Logic Flow
                     </h4>
                     <div className="space-y-2 mb-4">
-                      {codeExplanation.breakdown.map((step, i) => (
+                      {(codeExplanation.flow || codeExplanation.breakdown).map((step, i) => (
                         <div key={i} className="flex gap-2">
                           <span className="text-vscode-primary font-bold opacity-50">{i + 1}.</span>
                           <p className="text-vscode-text">{step}</p>
@@ -809,10 +826,30 @@ function App() {
                   </div>
                 )}
 
+                {diagramCode && (
+                  <div className="mb-4">
+                    <h4 className="text-vscode-secondary font-medium mb-2 uppercase text-[10px] tracking-widest">Visual Flow (Diagram)</h4>
+                    <MermaidDiagram chart={diagramCode} />
+                  </div>
+                )}
+
                 {codeExplanation.reasoning && (
                   <div className="mb-4">
                     <h4 className="text-vscode-secondary font-medium mb-1">Architect's Reasoning</h4>
                     <p className="text-vscode-text leading-relaxed bg-vscode-input p-2 rounded-sm border border-vscode-border">{codeExplanation.reasoning}</p>
+                  </div>
+                )}
+
+                {codeExplanation.relationships && codeExplanation.relationships.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-vscode-secondary font-medium mb-1 uppercase text-[10px] tracking-widest">Architectural Patterns</h4>
+                    <div className="space-y-1">
+                      {codeExplanation.relationships.map((rel, i) => (
+                        <p key={i} className="text-vscode-text text-sm flex items-center gap-2">
+                          <Circle size={4} weight="fill" className="text-vscode-primary" /> {rel}
+                        </p>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -826,11 +863,11 @@ function App() {
                   </div>
                 )}
 
-                {codeExplanation.keyConcepts && codeExplanation.keyConcepts.length > 0 && (
+                {(codeExplanation.keyPoints || codeExplanation.keyConcepts) && (codeExplanation.keyPoints || codeExplanation.keyConcepts).length > 0 && (
                   <div className="mb-4">
                     <h4 className="text-vscode-secondary font-medium mb-1">Key Concepts</h4>
                     <div className="flex flex-wrap gap-1">
-                      {codeExplanation.keyConcepts.map((concept, i) => (
+                      {(codeExplanation.keyPoints || codeExplanation.keyConcepts).map((concept, i) => (
                         <span key={i} className="bg-vscode-selected px-2 py-0.5 rounded-sm text-[10px] text-white">
                           {concept}
                         </span>
@@ -860,9 +897,26 @@ function App() {
                   </div>
                 )}
 
+                {codeExplanation.learningHints && codeExplanation.learningHints.length > 0 && (
+                  <div className="p-3 rounded-sm border border-vscode-primary/20 bg-vscode-input mb-4">
+                    <h4 className="text-vscode-primary font-bold text-xs uppercase tracking-widest mb-1 flex items-center gap-1">
+                      <GraduationCap size={12} weight="fill" />
+                      Try This Next
+                    </h4>
+                    <div className="space-y-1">
+                      {codeExplanation.learningHints.map((hint, i) => (
+                        <p key={i} className="text-vscode-text text-sm flex items-start gap-2">
+                          <span className="text-vscode-primary mt-1">•</span>
+                          {hint}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="border-t border-vscode-border pt-3">
-                  <h4 className="text-vscode-secondary font-medium mb-1">Final Summary</h4>
-                  <p className="text-vscode-text leading-relaxed font-bold">{codeExplanation.summary}</p>
+                  <h4 className="text-vscode-secondary font-medium mb-1 uppercase text-[10px] tracking-widest">Astra Verdict</h4>
+                  <p className="text-vscode-text leading-relaxed font-bold">{codeExplanation?.summary || "Analysis complete."}</p>
                 </div>
               </div>
             )}
