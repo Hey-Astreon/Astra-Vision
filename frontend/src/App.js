@@ -20,7 +20,8 @@ import {
   CircleNotch,
   Warning,
   Graph,
-  X
+  X,
+  GraduationCap
 } from '@phosphor-icons/react';
 import './App.css';
 import { explainCode, parseCode, analyzeCode, generateDiagram } from './utils/analysisEngine';
@@ -788,7 +789,6 @@ function App() {
             
             {codeExplanation && !codeExplanation.error && (
               <div className="explanation-section space-y-3 text-sm">
-                <div>
                 <div className="flex items-center justify-between gap-2 mb-4">
                   <div>
                     <h4 className="text-vscode-secondary font-medium mb-1 uppercase text-[10px] tracking-widest">Astra Overview</h4>
@@ -900,7 +900,7 @@ function App() {
                 {codeExplanation.learningHints && codeExplanation.learningHints.length > 0 && (
                   <div className="p-3 rounded-sm border border-vscode-primary/20 bg-vscode-input mb-4">
                     <h4 className="text-vscode-primary font-bold text-xs uppercase tracking-widest mb-1 flex items-center gap-1">
-                      <GraduationCap size={12} weight="fill" />
+                      {typeof GraduationCap !== "undefined" && <GraduationCap size={12} weight="fill" />}
                       Try This Next
                     </h4>
                     <div className="space-y-1">
