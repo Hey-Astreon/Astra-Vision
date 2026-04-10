@@ -755,26 +755,33 @@ export function explainLine(lineContent) {
   const meanings = [];
   const impacts = [];
   const warnings = [];
+  const whys = [];
   let example = null;
 
   // 1. Export Keyword
   if (line.includes("export")) {
     meanings.push("Makes this logic available outside of this file.");
     impacts.push("Allows other parts of your app to reuse this module.");
+    whys.push("Helps your application stay modular and allows features to be shared efficiently.");
     warnings.push("If you forget to export, other files won't be able to import it.");
   }
 
-  // 2. Function Declaration (Requirement)
-  if (line.includes("function") || line.includes("=>")) {
+  // 2. Function Detection (Requirement + Example generation)
+  const funcMatch = line.match(/function\s+(\w+)/) || line.match(/const\s+(\w+)\s*=\s*.*=>/);
+  if (funcMatch || line.includes("function") || line.includes("=>")) {
+    const name = funcMatch ? funcMatch[1] : "myFunction";
     meanings.push("Defines a reusable block of logic (a function).");
     impacts.push("Can be called elsewhere to perform this specific task.");
+    whys.push("Helps avoid repeating the same logic multiple times and organizes your tasks.");
     warnings.push("Misusing parameters or forgetting a return can break the expected output.");
+    if (!example) example = `${name}(...) -> executes logic`;
   }
 
   // 3. Parameters Detection
   if (line.match(/\(.*\w+.*\)/)) {
     meanings.push("Accepts inputs (parameters) to work with.");
     impacts.push("The inputs directly affect the final result of this line.");
+    whys.push("Allows the function to be flexible and work with different data every time.");
     warnings.push("Passing the wrong data type (like a string instead of a number) can cause bugs.");
   }
 
@@ -782,6 +789,7 @@ export function explainLine(lineContent) {
   if (line.includes("return")) {
     meanings.push("Sends a value back from the function.");
     impacts.push("Controls exactly what data the function outputs.");
+    whys.push("Ensures the function gives back a usable result to the rest of your program.");
     warnings.push("If a return is missing, the function will default to 'undefined'.");
   }
 
@@ -789,32 +797,37 @@ export function explainLine(lineContent) {
   if (line.includes("+")) {
     meanings.push("Combines values together.");
     impacts.push("Produces a result based on whether inputs are numbers or text.");
+    whys.push("Used to join text or calculate values in a single step.");
     warnings.push("Reminder: String + Number = Concatenation (joining text).");
     example = "5 + 5 = 10 | '5' + 5 = '55'";
   } else if (line.includes("*") || line.includes("/") || line.includes("-")) {
     meanings.push("Performs a mathematical calculation.");
     impacts.push("Scales or reduces the numeric output.");
+    whys.push("Used to perform mathematical transformations on your data efficiently.");
     warnings.push("Using math operators on non-numbers will result in NaN (Not a Number).");
+    if (!example) example = "10 * 2 = 20";
   }
 
-  // 6. Variable Declaration (Fallback detection)
+  // 6. Variable Declaration
   if (line.match(/(const|let|var)\s+\w+\s*=/)) {
     meanings.push("Creates a variable to store information.");
     impacts.push("Saves data so it can be used later in the program.");
+    whys.push("Allows the program to remember values and refer to them by name later.");
   }
 
   // 7. Fallback Layer (Ensure non-empty)
   if (meanings.length === 0) {
     meanings.push("Performs a step in the program execution.");
     impacts.push("Contributes to the overall logic of this file.");
+    whys.push("Helps build the specific sequence of instructions for your app.");
     warnings.push("Ensure correct syntax and that all variables are defined.");
   }
 
-  // Compose Final Result (Keep it short: 1-2 lines per field)
   return { 
     meaning: meanings.slice(0, 2).join(" "), 
     impact: impacts.slice(0, 2).join(" "), 
     warning: warnings.slice(0, 2).join(" "), 
+    why: whys.slice(0, 2).join(" "),
     example, 
     code: line 
   };

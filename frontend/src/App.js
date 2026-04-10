@@ -800,15 +800,20 @@ function App() {
                 {selectedLineInfo.code}
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div>
                   <h4 className="text-[9px] uppercase text-vscode-muted font-bold tracking-tight mb-1">Meaning</h4>
                   <p className="text-xs text-vscode-text leading-snug">{selectedLineInfo.meaning}</p>
                 </div>
 
+                <div className="bg-vscode-primary/5 p-2 rounded border border-vscode-primary/10">
+                  <h4 className="text-[9px] uppercase text-vscode-primary font-bold tracking-tight mb-1">Why this matters</h4>
+                  <p className="text-[10px] text-vscode-text leading-relaxed">{selectedLineInfo.why}</p>
+                </div>
+
                 {selectedLineInfo.example && (
-                  <div className="bg-vscode-primary/5 p-2 rounded border border-vscode-primary/20">
-                    <h4 className="text-[9px] uppercase text-vscode-primary font-bold tracking-tight mb-1">Quick Demo</h4>
+                  <div className="bg-vscode-secondary/5 p-2 rounded border border-vscode-secondary/20">
+                    <h4 className="text-[9px] uppercase text-vscode-secondary font-bold tracking-tight mb-1">Example Output</h4>
                     <p className="text-[10px] font-mono text-vscode-text">{selectedLineInfo.example}</p>
                   </div>
                 )}
