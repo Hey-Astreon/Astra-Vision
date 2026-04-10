@@ -112,32 +112,31 @@ export function analyzeCode(parsedData, fileContent = "") {
 
   // Logic to prevent "hallucination": Count matches.
   let detected = null;
+  let isConfident = false;
   for (const d of domainMap) {
-    const matches = d.keys.filter(k => allIdentifiers.includes(k)).length;
-    if (matches >= d.threshold) {
+    const matchCount = d.keys.filter(k => allIdentifiers.includes(k)).length;
+    if (matchCount >= d.threshold) {
       detected = d;
+      isConfident = true;
       break;
     }
   }
 
   if (!detected) {
     detected = {
-      domain: 'General Software Flow',
-      usage: 'A standard sequence of instructions.',
-      reasoning: 'The code follows a clean, linear path to perform its task.'
+      domain: 'General Logic',
+      usage: 'standard sequence of instructions.',
+      reasoning: 'Clean, linear logic execution.'
     };
   }
 
-  // 3. Function Relationship Detection
+  // 3. Truth-First Relationship Detection
   const relationships = [];
   if (functions.length > 1) {
-    // Pipeline logic: check if returns are likely targets for other functions (shallow check)
-    relationships.push("Modular separation: The logic is broken into specialized parts.");
+    relationships.push("Modular separation: Logic is organized into specialized blocks.");
     if (functions.length > 2) {
-      relationships.push("Architectural layering: Functions handle separate concerns to keep things clean.");
+      relationships.push("Architectural layering: Functions manage separate concerns.");
     }
-  } else if (functions.length === 1) {
-    relationships.push("Singular responsibility: The script focuses on one clear task.");
   }
 
   // 4. Data Flow Analysis (Input -> Processing -> Output)
@@ -179,67 +178,82 @@ export function analyzeCode(parsedData, fileContent = "") {
     confidenceLevel = logs.length > 0 ? "high" : "medium";
   }
 
-  // 7. Behavioral Inference (What does it actually DO?)
-  let behavior = "A standard sequence of instructions.";
-  const returnStr = returns.join(" ");
+  // 7. Strict Behavioral Inference (Zero Assumption Rule)
+  let behavior = "logic flow";
+  let confidenceScore = 0;
+  const returnStr = returns.join(" ").toLowerCase();
   
-  if (returnStr.includes("+")) behavior = "Calculating a sum or combining data strings.";
-  else if (returnStr.includes("-") || returnStr.includes("*") || returnStr.includes("/")) behavior = "Performing mathematical transformations.";
-  else if (fileContent.includes("fetch") || fileContent.includes("axios")) behavior = "Requesting data from an external service.";
-  else if (returnStr.includes(".map") || returnStr.includes(".filter")) behavior = "Processing and transforming a list of items.";
+  // Specific Behavior Mapping
+  if (returnStr.includes("+") && (returnStr.includes('"') || returnStr.includes("'") || returnStr.includes("`"))) {
+    behavior = "STRING_BUILDER";
+    confidenceScore = 90;
+  } else if (returnStr.includes("+") || returnStr.includes("-") || returnStr.includes("*") || returnStr.includes("/")) {
+    behavior = "MATH_TRANSFORM";
+    confidenceScore = 90;
+  } else if (fileContent.includes("fetch") || fileContent.includes("axios")) {
+    behavior = "DATA_FETCH";
+    confidenceScore = 95;
+  } else if (returnStr.includes(".map") || returnStr.includes(".filter") || returnStr.includes(".reduce")) {
+    behavior = "LIST_TRANSFORMATION";
+    confidenceScore = 90;
+  }
   
-  // 8. Risk Assessment (What could go wrong?)
+  // 8. Fact-Based Risk Assessment
   const risks = [];
-  if (returnStr.includes("+")) risks.push(`Type Coercion: If the inputs are strings instead of numbers, JavaScript will '+' them as text (e.g., "5" + "5" = "55") instead of adding them.`);
-  if (returnStr.includes(".") && !returnStr.includes("(")) risks.push("Null Safety: Accessing properties on a variable that might be null or undefined will crash your application.");
-  if (variables.length > 5) risks.push("State Complexity: Having many variables makes it harder to track which data is current or 'stale'.");
+  if (behavior === "MATH_TRANSFORM" || behavior === "STRING_BUILDER") {
+    if (returnStr.includes("+")) risks.push(`Type Coercion: If inputs are strings instead of numbers, JavaScript will concatenate them (e.g., "5" + "5" = "55").`);
+  }
+  if (returnStr.includes(".") && !returnStr.includes("(") && (returnStr.includes("obj") || returnStr.includes("item") || returnStr.includes("data"))) {
+    risks.push("Null Safety: Accessing properties on potentially empty objects may cause crashes.");
+  }
 
-  // 9. Design Pattern Detection (Pure vs Side-effect)
-  const isPure = functions.length > 0 && !logs.length && !fileContent.includes("fetch") && !fileContent.includes("axios");
-  const designPattern = isPure ? "Pure Utility Pattern (Stateless)" : "Interactive Pattern (Side-Effects)";
+  // 9. Pattern Detection (Evidence-based only)
+  const hasSideEffects = logs.length > 0 || fileContent.includes("fetch") || fileContent.includes("axios") || fileContent.includes("useState") || fileContent.includes("useEffect");
+  const isPure = functions.length > 0 && !hasSideEffects;
+  
+  const designPattern = isPure ? "Stateless Utility" : (hasSideEffects ? "Interactive Logic" : null);
   const devInsight = isPure 
-    ? "This is a 'Pure' function: it doesn't change anything outside itself, making it very predictable and easy to test."
-    : "This code interacts with systems outside of itself (like logs or servers). This is common for UI or communications logic.";
+    ? "Predictable Logic: This function is 'pure', meaning it gives identical results for identical inputs with no side effects."
+    : (hasSideEffects ? "Stateful Interaction: This code manages external state or observability (logs/network)." : null);
 
-  // 10. Learning Hints
+  // 10. Conditional Learning Hints
   const learningHints = [];
-  if (logs.length === 0) learningHints.push("Experiment: Add a console.log() to see how your variables change.");
-  if (functions.length === 1) learningHints.push("Challenge: Try breaking the logic into two separate functions.");
-  if (variables.length === 0) learningHints.push("Try this: Declare a 'const' variable to store your intermediate result.");
-  if (learningHints.length === 0) learningHints.push("Next step: Try adding a parameter to your function to make it more flexible.");
+  if (logs.length === 0 && functions.length > 0) learningHints.push("Experiment: Add a console.log() to track how data moves through your function.");
+  if (variables.length === 0 && returns.length > 0) learningHints.push("Try this: Capture your intermediate result in a 'const' variable for better readability.");
 
-  // 11. Enhanced Descriptive Concepts
+  // 11. Fact-Based Concepts
   const conceptDescriptions = {
-    "Functions": "Used to organize reusable logic into blocks.",
-    "State": "Used to hold and manage data during execution.",
-    "Logic Chaining": "Used to connect multiple steps into a pipeline.",
-    "Basic Flow": "Used for simple, one-way data processing.",
-    "Data Capture": "Used to store inputs for later processing.",
-    "Output Transformation": "Used to convert data into a final result.",
-    "Telemetry & Monitoring": "Used to track execution using logs."
+    "Functions": "Reusable logic blocks.",
+    "State": "Local data storage.",
+    "Logic Chaining": "Multi-step processing.",
+    "Observability": "Execution tracking via logs."
   };
 
-  const enhancedConcepts = ["Functions", "State", isIntermediate ? "Logic Chaining" : "Basic Flow"].map(c => {
-    return `${c} – ${conceptDescriptions[c] || "Core programming building block"}`;
-  });
+  const activeConcepts = ["Functions"];
+  if (variables.length > 0) activeConcepts.push("State");
+  if (isIntermediate) activeConcepts.push("Logic Chaining");
+  if (logs.length > 0) activeConcepts.push("Observability");
+
+  const enhancedConcepts = activeConcepts.map(c => `${c} – ${conceptDescriptions[c]}`);
 
   return {
-    purpose: `To implement ${detected.domain} logic focused on ${detected.usage.toLowerCase()}`,
-    behavior: behavior,
-    risks: risks,
-    designPattern: designPattern,
-    devInsight: devInsight,
-    flow: flow,
+    purpose: isConfident ? `To implement ${detected.domain} logic.` : "To execute a sequence of instructions.",
+    behavior,
+    confidenceScore,
+    risks,
+    designPattern,
+    devInsight,
+    flow,
     concepts: enhancedConcepts,
-    inputs: inputs,
+    inputs,
     outputs: returns.join(", ") || "No final data produced",
-    reasoning: detected.reasoning,
-    realWorldUsage: detected.usage,
-    commonMistakes: mistakes.length > 0 ? mistakes : [`Forgetting to validate that "${inputsArr[0] || 'input'}" is the correct type.`],
-    difficultyLevel: difficultyLevel,
-    relationships: relationships,
-    confidenceLevel: confidenceLevel,
-    learningHints: learningHints
+    reasoning: isConfident ? detected.reasoning : "Clean, step-by-step logic execution.",
+    realWorldUsage: isConfident ? detected.usage : null,
+    commonMistakes: mistakes.length > 0 ? mistakes : [],
+    difficultyLevel,
+    relationships,
+    confidenceLevel,
+    learningHints
   };
 }
 
@@ -251,33 +265,41 @@ export function analyzeCode(parsedData, fileContent = "") {
  * @returns {Object} Final strict structured explanation
  */
 export function generateExplanation(analysis) {
-  // Edge Case Handling
-  if (!analysis) {
-    return {
-      overview: "This code does not contain enough structure to analyze.",
-      breakdown: [],
-      keyConcepts: [],
-      reasoning: "",
-      realWorldUsage: "",
-      commonMistakes: [],
-      risks: [],
-      analogy: "",
-      summary: "",
-      devInsight: ""
-    };
+  if (!analysis) return null;
+
+  // 1. Truth-First Behavioral Labeling
+  const behaviorLabels = {
+    "MATH_TRANSFORM": "mathematical transformations",
+    "STRING_BUILDER": "text and message construction",
+    "DATA_FETCH": "external data communication",
+    "LIST_TRANSFORMATION": "list transformation logic",
+    "logic flow": "standard logic flow"
+  };
+
+  // 2. Strict Analogy Engine (Zero Assumption)
+  let analogy = null;
+  if (analysis.confidenceScore >= 90) {
+    if (analysis.behavior === "MATH_TRANSFORM") analogy = "It acts like a digital calculator: transforming numeric inputs into a calculated result.";
+    else if (analysis.behavior === "STRING_BUILDER") analogy = "It acts like a label maker: assembling various text pieces into a final message.";
+    else if (analysis.behavior === "DATA_FETCH") analogy = "It acts like a courier: requesting specific information from a remote location and bringing it back.";
   }
 
+  // 3. Language Softening Layer
+  const isHighConf = analysis.confidenceLevel === "high";
+  const hedge = isHighConf ? "" : "appears to ";
+
   return {
-    overview: `This ${analysis.difficultyLevel} implementation handles ${analysis.behavior.toLowerCase()}`,
+    purpose: analysis.purpose,
+    overview: `This ${analysis.difficultyLevel} logic ${hedge}handles ${behaviorLabels[analysis.behavior] || "general operations"}.`,
     breakdown: analysis.flow,
     keyConcepts: analysis.concepts,
-    reasoning: `Architecture: ${analysis.reasoning} This follows a ${analysis.designPattern}.`,
+    reasoning: analysis.designPattern ? `Architecture: This implements a ${analysis.designPattern}. ${analysis.reasoning}` : analysis.reasoning,
     realWorldUsage: analysis.realWorldUsage,
     commonMistakes: analysis.commonMistakes,
     risks: analysis.risks,
     devInsight: analysis.devInsight,
-    analogy: analysis.behavior.includes("Calculating") ? "It's like a calculator: you provide numbers, and it precisely transforms them into a single result." : "It's like a processing station: data enters on one side, is organized, and is passed through to the next phase.",
-    summary: `Astra Verdict: Reliable ${analysis.difficultyLevel} logic for ${analysis.realWorldUsage.toLowerCase()}`,
+    analogy: analogy,
+    summary: `Astra Verdict: ${analysis.difficultyLevel} script focused on ${behaviorLabels[analysis.behavior] || "logic steps"}.`,
     difficultyLevel: analysis.difficultyLevel,
     relationships: analysis.relationships,
     confidenceLevel: analysis.confidenceLevel,
@@ -337,6 +359,7 @@ export function explainCode(fileContent) {
       diagram: diagram || "graph TD\n  A[Start] --> B[Diagram Error]",
       difficulty: explanation.difficultyLevel || "basic",
       // Pass-through for deep analysis features
+      purpose: explanation.purpose || "",
       reasoning: explanation.reasoning || "",
       commonMistakes: explanation.commonMistakes || [],
       learningHints: explanation.learningHints || [],
