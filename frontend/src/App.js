@@ -856,6 +856,23 @@ function App() {
                   </div>
                 )}
 
+                {codeExplanation.risks && codeExplanation.risks.length > 0 && (
+                  <div className="p-3 rounded-sm border border-vscode-warning/30 bg-vscode-info/5 mb-4">
+                    <h4 className="text-vscode-warning font-bold text-xs uppercase tracking-widest mb-1 flex items-center gap-1">
+                      {typeof Warning !== "undefined" && <Warning size={12} weight="fill" />}
+                      What Could Go Wrong?
+                    </h4>
+                    <div className="space-y-1">
+                      {codeExplanation.risks.map((risk, i) => (
+                        <p key={i} className="text-vscode-text text-sm flex items-start gap-2">
+                           <span className="text-vscode-warning mt-1">•</span>
+                           {risk}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {codeExplanation.commonMistakes && codeExplanation.commonMistakes.length > 0 && (
                   <div className="p-3 rounded-sm border border-vscode-danger/30 bg-vscode-danger/5 mb-4">
                     <h4 className="text-vscode-danger font-bold text-xs uppercase tracking-widest mb-1 flex items-center gap-1">
@@ -874,6 +891,16 @@ function App() {
                   <div className="mb-4">
                     <h4 className="text-vscode-secondary font-medium mb-1 uppercase text-[10px] tracking-widest">Real-World Case</h4>
                     <p className="text-vscode-text leading-relaxed text-xs opacity-80">{codeExplanation.realWorldUsage}</p>
+                  </div>
+                )}
+
+                {codeExplanation.devInsight && (
+                  <div className="mb-4 bg-vscode-primary/5 p-3 rounded-sm border-l-2 border-vscode-primary">
+                    <h4 className="text-vscode-primary font-bold text-[10px] uppercase tracking-widest mb-1 flex items-center gap-1">
+                      {typeof Lightning !== "undefined" && <Lightning size={12} weight="fill" />}
+                      Real Dev Insight
+                    </h4>
+                    <p className="text-vscode-text leading-relaxed text-xs italic">{codeExplanation.devInsight}</p>
                   </div>
                 )}
 

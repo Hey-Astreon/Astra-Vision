@@ -43,15 +43,17 @@ export function parseCode(fileContent) {
     }
   });
 
-  // Variable declarations: const name = ...
-  const varRegex = /(?:const|let|var)\s+(\w+)\s*(?==|;)/g;
+  // Variable declarations: const name = ... or const { x } = ...
+  const varRegex = /(?:const|let|var)\s+({?\s*[\w\s,]+\s*}?)\s*(?==|;)/g;
   let varMatch;
   while ((varMatch = varRegex.exec(fileContent)) !== null) {
-    const name = varMatch[1];
-    // Filter out variable names that are actually function names caught above
-    if (!functions.find(f => f.name === name)) {
-      variables.push(name);
-    }
+    let names = varMatch[1].replace(/[{}]/g, '').split(',').map(n => n.trim());
+    names.forEach(name => {
+      // Filter out variable names that are actually function names caught above
+      if (name && !functions.find(f => f.name === name)) {
+        variables.push(name);
+      }
+    });
   }
 
   // Console log usage: console.log(...)
@@ -76,9 +78,10 @@ export function parseCode(fileContent) {
  * Phase 1.5: Confidence-based inference, Data-Flow tracking, and Difficulty awareness.
  * 
  * @param {Object} parsedData - Metadata from parseCode
+ * @param {string} fileContent - Raw source code for pattern matching
  * @returns {Object|null} Semantic analysis results
  */
-export function analyzeCode(parsedData) {
+export function analyzeCode(parsedData, fileContent = "") {
   const { functions, variables, logs, returns } = parsedData;
 
   // Handle empty or low-signal input as per Edge Case requirements
@@ -176,14 +179,36 @@ export function analyzeCode(parsedData) {
     confidenceLevel = logs.length > 0 ? "high" : "medium";
   }
 
-  // 7. Learning Hints
+  // 7. Behavioral Inference (What does it actually DO?)
+  let behavior = "A standard sequence of instructions.";
+  const returnStr = returns.join(" ");
+  
+  if (returnStr.includes("+")) behavior = "Calculating a sum or combining data strings.";
+  else if (returnStr.includes("-") || returnStr.includes("*") || returnStr.includes("/")) behavior = "Performing mathematical transformations.";
+  else if (fileContent.includes("fetch") || fileContent.includes("axios")) behavior = "Requesting data from an external service.";
+  else if (returnStr.includes(".map") || returnStr.includes(".filter")) behavior = "Processing and transforming a list of items.";
+  
+  // 8. Risk Assessment (What could go wrong?)
+  const risks = [];
+  if (returnStr.includes("+")) risks.push(`Type Coercion: If the inputs are strings instead of numbers, JavaScript will '+' them as text (e.g., "5" + "5" = "55") instead of adding them.`);
+  if (returnStr.includes(".") && !returnStr.includes("(")) risks.push("Null Safety: Accessing properties on a variable that might be null or undefined will crash your application.");
+  if (variables.length > 5) risks.push("State Complexity: Having many variables makes it harder to track which data is current or 'stale'.");
+
+  // 9. Design Pattern Detection (Pure vs Side-effect)
+  const isPure = functions.length > 0 && !logs.length && !fileContent.includes("fetch") && !fileContent.includes("axios");
+  const designPattern = isPure ? "Pure Utility Pattern (Stateless)" : "Interactive Pattern (Side-Effects)";
+  const devInsight = isPure 
+    ? "This is a 'Pure' function: it doesn't change anything outside itself, making it very predictable and easy to test."
+    : "This code interacts with systems outside of itself (like logs or servers). This is common for UI or communications logic.";
+
+  // 10. Learning Hints
   const learningHints = [];
   if (logs.length === 0) learningHints.push("Experiment: Add a console.log() to see how your variables change.");
   if (functions.length === 1) learningHints.push("Challenge: Try breaking the logic into two separate functions.");
   if (variables.length === 0) learningHints.push("Try this: Declare a 'const' variable to store your intermediate result.");
   if (learningHints.length === 0) learningHints.push("Next step: Try adding a parameter to your function to make it more flexible.");
 
-  // 8. Enhanced Descriptive Concepts
+  // 11. Enhanced Descriptive Concepts
   const conceptDescriptions = {
     "Functions": "Used to organize reusable logic into blocks.",
     "State": "Used to hold and manage data during execution.",
@@ -200,13 +225,17 @@ export function analyzeCode(parsedData) {
 
   return {
     purpose: `To implement ${detected.domain} logic focused on ${detected.usage.toLowerCase()}`,
+    behavior: behavior,
+    risks: risks,
+    designPattern: designPattern,
+    devInsight: devInsight,
     flow: flow,
     concepts: enhancedConcepts,
     inputs: inputs,
     outputs: returns.join(", ") || "No final data produced",
     reasoning: detected.reasoning,
     realWorldUsage: detected.usage,
-    commonMistakes: mistakes.length > 0 ? mistakes : ["Assuming inputs are always the correct type."],
+    commonMistakes: mistakes.length > 0 ? mistakes : [`Forgetting to validate that "${inputsArr[0] || 'input'}" is the correct type.`],
     difficultyLevel: difficultyLevel,
     relationships: relationships,
     confidenceLevel: confidenceLevel,
@@ -231,32 +260,24 @@ export function generateExplanation(analysis) {
       reasoning: "",
       realWorldUsage: "",
       commonMistakes: [],
+      risks: [],
       analogy: "",
-      summary: ""
+      summary: "",
+      devInsight: ""
     };
   }
 
-  const isBasic = analysis.difficultyLevel === "basic";
-
-  // Analogy Control: ONLY for basic tasks. Never forced.
-  let analogy = "";
-  if (isBasic) {
-    if (analysis.inputs.includes("No external")) {
-      analogy = "It's like a pre-set light timer: it turns on and off exactly when expected without needing new instructions.";
-    } else {
-      analogy = "It's like a calculator: you provide the numbers, it does the work you asked, and it shows you the answer.";
-    }
-  }
-
   return {
-    overview: `This implementation handles ${analysis.purpose.replace('To implement ', '')}`,
+    overview: `This ${analysis.difficultyLevel} implementation handles ${analysis.behavior.toLowerCase()}`,
     breakdown: analysis.flow,
     keyConcepts: analysis.concepts,
-    reasoning: analysis.reasoning,
+    reasoning: `Architecture: ${analysis.reasoning} This follows a ${analysis.designPattern}.`,
     realWorldUsage: analysis.realWorldUsage,
     commonMistakes: analysis.commonMistakes,
-    analogy: analogy,
-    summary: `A ${analysis.difficultyLevel} summary: ${analysis.concepts[0].split(' – ')[0]} implementation for ${analysis.realWorldUsage.toLowerCase()}`,
+    risks: analysis.risks,
+    devInsight: analysis.devInsight,
+    analogy: analysis.behavior.includes("Calculating") ? "It's like a calculator: you provide numbers, and it precisely transforms them into a single result." : "It's like a processing station: data enters on one side, is organized, and is passed through to the next phase.",
+    summary: `Astra Verdict: Reliable ${analysis.difficultyLevel} logic for ${analysis.realWorldUsage.toLowerCase()}`,
     difficultyLevel: analysis.difficultyLevel,
     relationships: analysis.relationships,
     confidenceLevel: analysis.confidenceLevel,
@@ -299,7 +320,7 @@ export function explainCode(fileContent) {
   try {
     // 2. Full Pipeline Execution
     const parsedData = parseCode(fileContent);
-    const analysis = analyzeCode(parsedData);
+    const analysis = analyzeCode(parsedData, fileContent);
     
     // If analysis fails (low signal), return the fallback
     if (!analysis) return internalFallback;
@@ -315,13 +336,15 @@ export function explainCode(fileContent) {
       flow: Array.isArray(explanation.breakdown) ? explanation.breakdown : [],
       diagram: diagram || "graph TD\n  A[Start] --> B[Diagram Error]",
       difficulty: explanation.difficultyLevel || "basic",
-      // Pass-through for existing UI features
+      // Pass-through for deep analysis features
       reasoning: explanation.reasoning || "",
       commonMistakes: explanation.commonMistakes || [],
       learningHints: explanation.learningHints || [],
       analogy: explanation.analogy || "",
       realWorldUsage: explanation.realWorldUsage || "",
-      relationships: explanation.relationships || []
+      relationships: explanation.relationships || [],
+      risks: explanation.risks || [],
+      devInsight: explanation.devInsight || ""
     };
   } catch (error) {
     console.error("Analysis Engine Error:", error);
@@ -360,7 +383,6 @@ export function generateDiagram(analysis) {
   }
 
   let diagram = "graph TD\n";
-  const nodeIds = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
   // 2. Refined Label Transformation
   const toActionLabel = (sentence) => {
@@ -392,8 +414,9 @@ export function generateDiagram(analysis) {
   };
 
   flowSteps.forEach((step, index) => {
-    const id = nodeIds[index % nodeIds.length];
-    const nextId = nodeIds[(index + 1) % nodeIds.length];
+    // Architectural Change: Numeric IDs (node0, node1...) to prevent collisions in large flows
+    const id = `node${index}`;
+    const nextId = `node${index + 1}`;
 
     // 3. Precise Role Detection (Before transformation)
     const lowerStep = step.toLowerCase();
@@ -407,10 +430,12 @@ export function generateDiagram(analysis) {
     // 4. Generate Action Label
     const actionLabel = toActionLabel(step);
     
-    // Final sanitization
+    // Final sanitization for Mermaid safety (Escaping reserved terms/chars)
     const cleanLabel = actionLabel
-      .replace(/[\[\]{}()]/g, "")
-      .replace(/["']/g, "'")
+      .replace(/[\[\]{}()]/g, "") // Remove brackets
+      .replace(/[;]/g, ",")       // Remove semicolons
+      .replace(/-->/g, "->")      // Sanitize connections
+      .replace(/["']/g, "'")      // Unify quotes
       .trim();
 
     // Word count control
