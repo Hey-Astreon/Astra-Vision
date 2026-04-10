@@ -742,7 +742,8 @@ export function analyzeError(errorMessage, codeContext = "") {
 
 /**
  * 7. explainLine(lineContent)
- * Granular analysis for line-level interactivity.
+ * Smarter rule-based granular analysis for line-level interactivity.
+ * Uses a Collector Pattern to identify multiple concepts in a single line.
  * 
  * @param {string} lineContent - A single line of code
  * @returns {Object} Micro-explanation and behavioral notes
@@ -751,64 +752,70 @@ export function explainLine(lineContent) {
   const line = lineContent.trim();
   if (!line || line === "{" || line === "}") return null;
 
-  let meaning = "Executes logic on this line.";
-  let impact = "Changes the internal state of the program.";
-  let warning = "Ensure syntax is correct and all variables are defined.";
+  const meanings = [];
+  const impacts = [];
+  const warnings = [];
   let example = null;
 
-  // 0. Function Declaration (Requirement)
+  // 1. Export Keyword
+  if (line.includes("export")) {
+    meanings.push("Makes this logic available outside of this file.");
+    impacts.push("Allows other parts of your app to reuse this module.");
+    warnings.push("If you forget to export, other files won't be able to import it.");
+  }
+
+  // 2. Function Declaration (Requirement)
   if (line.includes("function") || line.includes("=>")) {
-    meaning = "Defines a reusable block of logic (a function).";
-    impact = "Does nothing until it is called elsewhere in the code.";
-    warning = "Double-check that all parameters are provided when you call it.";
+    meanings.push("Defines a reusable block of logic (a function).");
+    impacts.push("Can be called elsewhere to perform this specific task.");
+    warnings.push("Misusing parameters or forgetting a return can break the expected output.");
   }
 
-  // 1. Variable Declaration
-  const varMatch = line.match(/(const|let|var)\s+(\w+)\s*=\s*(.*)/);
-  if (varMatch) {
-    meaning = `Creates a container named '${varMatch[2]}' and initializes it with a value.`;
-    impact = `Defines '${varMatch[2]}' for use in later parts of the code.`;
-    warning = `Re-assigning a 'const' later will cause a crash. Use 'let' if the value needs to change.`;
+  // 3. Parameters Detection
+  if (line.match(/\(.*\w+.*\)/)) {
+    meanings.push("Accepts inputs (parameters) to work with.");
+    impacts.push("The inputs directly affect the final result of this line.");
+    warnings.push("Passing the wrong data type (like a string instead of a number) can cause bugs.");
   }
 
-  // 2. Return Statement
-  const retMatch = line.match(/return\s+(.*)/);
-  if (retMatch) {
-    meaning = "Sends a value back to the code that called this function.";
-    impact = "Ends the function execution and provides the final output.";
-    warning = "Code written after this line will never be executed.";
+  // 4. Return Statement
+  if (line.includes("return")) {
+    meanings.push("Sends a value back from the function.");
+    impacts.push("Controls exactly what data the function outputs.");
+    warnings.push("If a return is missing, the function will default to 'undefined'.");
   }
 
-  // 3. Console Log
-  if (line.includes("console.log")) {
-    meaning = "Prints information to the developer console for debugging.";
-    impact = "Does not change data; purely for observation.";
-    warning = "Forgeting to remove logs in production can slow down your app.";
-  }
-
-  // 4. Mathematical Operators (Bonus Category)
+  // 5. Operators Logic
   if (line.includes("+")) {
-    meaning = "Combines two values. In JavaScript, this can be addition or text joining.";
-    impact = "Produces a new value based on the types of the inputs.";
+    meanings.push("Combines values together.");
+    impacts.push("Produces a result based on whether inputs are numbers or text.");
+    warnings.push("Reminder: String + Number = Concatenation (joining text).");
     example = "5 + 5 = 10 | '5' + 5 = '55'";
-    warning = "Mixing strings and numbers might lead to unexpected '55' results.";
   } else if (line.includes("*") || line.includes("/") || line.includes("-")) {
-    meaning = "Performs a mathematical calculation on numeric values.";
-    impact = "Updates or produces a numeric result.";
-    warning = "Performing math on 'undefined' or 'null' will result in NaN (Not a Number).";
+    meanings.push("Performs a mathematical calculation.");
+    impacts.push("Scales or reduces the numeric output.");
+    warnings.push("Using math operators on non-numbers will result in NaN (Not a Number).");
   }
 
-  // 5. Array Methods
-  if (line.includes(".map") || line.includes(".filter")) {
-    meaning = "Transforms or filters a list of items into a new list.";
-    impact = "Creates a new array without changing the original one.";
-    warning = "Calling this on something that isn't an array will crash the app.";
+  // 6. Variable Declaration (Fallback detection)
+  if (line.match(/(const|let|var)\s+\w+\s*=/)) {
+    meanings.push("Creates a variable to store information.");
+    impacts.push("Saves data so it can be used later in the program.");
   }
 
-  // 6. Property Access Safety
-  if (line.includes(".") && !line.includes("(")) {
-    warning = "If the object before the '.' is null or undefined, the app will crash.";
+  // 7. Fallback Layer (Ensure non-empty)
+  if (meanings.length === 0) {
+    meanings.push("Performs a step in the program execution.");
+    impacts.push("Contributes to the overall logic of this file.");
+    warnings.push("Ensure correct syntax and that all variables are defined.");
   }
 
-  return { meaning, impact, warning, example, code: line };
+  // Compose Final Result (Keep it short: 1-2 lines per field)
+  return { 
+    meaning: meanings.slice(0, 2).join(" "), 
+    impact: impacts.slice(0, 2).join(" "), 
+    warning: warnings.slice(0, 2).join(" "), 
+    example, 
+    code: line 
+  };
 }
