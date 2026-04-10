@@ -21,24 +21,15 @@ import {
   Warning,
   Graph,
   X,
-  GraduationCap
+  GraduationCap,
+  Circle
 } from '@phosphor-icons/react';
 import './App.css';
 import { explainCode, parseCode, analyzeCode, generateDiagram } from './utils/analysisEngine';
 
 // Local Mock AI Logic
 
-function explainError(errorMessage) {
-  return {
-    meaning: "The application encountered a localized issue.",
-    cause: "This is a simulated local error response for: " + errorMessage,
-    fix: "No fix needed. Offline mode is working as expected!"
-  };
-}
-
-function generateFlow(fileContent) {
-  return ["Start", "Function defined", "Logic executed", "Output returned"];
-}
+// Removed legacy mock functions (explainError, generateFlow) to use AnalysisEngine orchestrators.
 
 // Mock repository data for demo/fallback mode
 const MOCK_REPO_FILES = {
@@ -151,9 +142,9 @@ const MermaidDiagram = ({ chart }) => {
 const FileIcon = ({ filename, isFolder, isOpen }) => {
   if (isFolder) {
     return isOpen ? (
-      <FolderOpen size={16} weight="fill" className="text-vscode-warning" />
+      typeof FolderOpen !== "undefined" && <FolderOpen size={16} weight="fill" className="text-vscode-warning" />
     ) : (
-      <Folder size={16} weight="fill" className="text-vscode-warning" />
+      typeof Folder !== "undefined" && <Folder size={16} weight="fill" className="text-vscode-warning" />
     );
   }
   
@@ -161,23 +152,23 @@ const FileIcon = ({ filename, isFolder, isOpen }) => {
   switch (ext) {
     case 'js':
     case 'jsx':
-      return <FileJs size={16} weight="fill" className="text-yellow-400" />;
+      return typeof FileJs !== "undefined" && <FileJs size={16} weight="fill" className="text-yellow-400" />;
     case 'ts':
     case 'tsx':
-      return <FileTs size={16} weight="fill" className="text-blue-400" />;
+      return typeof FileTs !== "undefined" && <FileTs size={16} weight="fill" className="text-blue-400" />;
     case 'css':
     case 'scss':
-      return <FileCss size={16} weight="fill" className="text-blue-300" />;
+      return typeof FileCss !== "undefined" && <FileCss size={16} weight="fill" className="text-blue-300" />;
     case 'html':
-      return <FileHtml size={16} weight="fill" className="text-orange-400" />;
+      return typeof FileHtml !== "undefined" && <FileHtml size={16} weight="fill" className="text-orange-400" />;
     case 'py':
-      return <FileCode size={16} weight="fill" className="text-green-400" />;
+      return typeof FileCode !== "undefined" && <FileCode size={16} weight="fill" className="text-green-400" />;
     case 'json':
-      return <FileCode size={16} weight="fill" className="text-yellow-300" />;
+      return typeof FileCode !== "undefined" && <FileCode size={16} weight="fill" className="text-yellow-300" />;
     case 'md':
-      return <FileCode size={16} weight="fill" className="text-vscode-text" />;
+      return typeof FileCode !== "undefined" && <FileCode size={16} weight="fill" className="text-vscode-text" />;
     default:
-      return <File size={16} weight="fill" className="text-vscode-muted" />;
+      return typeof File !== "undefined" && <File size={16} weight="fill" className="text-vscode-muted" />;
   }
 };
 
@@ -239,7 +230,7 @@ const TreeNode = ({ node, level = 0, selectedFile, onSelectFile, expandedFolders
       >
         {isFolder && (
           <span className="text-vscode-muted">
-            {isExpanded ? <CaretDown size={12} /> : <CaretRight size={12} />}
+            {isExpanded ? (typeof CaretDown !== "undefined" && <CaretDown size={12} />) : (typeof CaretRight !== "undefined" && <CaretRight size={12} />)}
           </span>
         )}
         {!isFolder && <span className="w-3" />}
@@ -269,7 +260,7 @@ const TreeNode = ({ node, level = 0, selectedFile, onSelectFile, expandedFolders
 
 // Loading spinner component
 const Spinner = ({ size = 20 }) => (
-  <CircleNotch size={size} className="animate-spin text-vscode-primary" />
+  typeof CircleNotch !== "undefined" && <CircleNotch size={size} className="animate-spin text-vscode-primary" />
 );
 
 // Main App component
@@ -526,9 +517,8 @@ function App() {
     }
   };
   
-  // Explain error - Mock Local Logic
+  // Explain error - Orchestrated via Error Intelligence Engine
   const handleExplainError = async () => {
-    // GUARANTEE VALID INPUT
     if (!errorInput || errorInput.trim() === '') {
       setErrorExplanation({ error: 'Please enter an error message.' });
       return;
@@ -538,10 +528,10 @@ function App() {
     setErrorExplanation(null);
     
     try {
-      // Simulate slight processing delay
       await new Promise(r => setTimeout(r, 500));
       
-      const result = explainError(errorInput);
+      // Integration: Use the context-aware analyzeError engine
+      const result = analyzeError(errorInput, fileContent);
       setErrorExplanation(result);
     } catch (error) {
       console.error('Error explaining error:', error);
@@ -551,9 +541,8 @@ function App() {
     }
   };
   
-  // Generate flow - Mock Local Logic
+  // Generate flow - Integrated with Analysis Engine Orchestrator
   const handleGenerateFlow = async () => {
-    // GUARANTEE VALID INPUT - single source of truth
     if (!fileContent || fileContent.trim() === '') {
       setFlowDiagram({ error: 'No code loaded. Please select a file first.' });
       return;
@@ -563,25 +552,16 @@ function App() {
     setFlowDiagram(null);
     
     try {
-      // Simulate slight processing delay
       await new Promise(r => setTimeout(r, 500));
       
-      const steps = generateFlow(fileContent);
+      const analysis = analyzeCode(parseCode(fileContent));
+      if (!analysis) throw new Error("File too simple for flow analysis.");
       
-      // Convert array steps to local Mermaid diagram format
-      let diagramStr = "graph TD\n";
-      steps.forEach((step, idx) => {
-        const nodeName = `step${idx}`;
-        diagramStr += `  ${nodeName}["${step}"]\n`;
-        if (idx > 0) {
-          diagramStr += `  step${idx - 1} --> ${nodeName}\n`;
-        }
-      });
-      
-      setFlowDiagram({ diagram: diagramStr });
+      const diagram = generateDiagram(analysis);
+      setFlowDiagram({ diagram });
     } catch (error) {
       console.error('Error generating flow:', error);
-      setFlowDiagram({ error: 'Something went wrong. Try again.' });
+      setFlowDiagram({ error: 'System cannot visualize this specific code yet.' });
     } finally {
       setLoadingFlow(false);
     }
@@ -594,14 +574,14 @@ function App() {
         {/* Header */}
         <div className="p-3 border-b border-vscode-border">
           <div className="flex items-center gap-2 mb-3">
-            <Graph size={24} weight="bold" className="text-vscode-primary" />
+            {typeof Graph !== "undefined" && <Graph size={24} weight="bold" className="text-vscode-primary" />}
             <h1 className="text-white font-mono font-bold text-lg">Astra Vision</h1>
           </div>
           
           {/* GitHub URL Input */}
           <div className="space-y-2">
             <div className="relative">
-              <GithubLogo size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-vscode-muted" />
+              {typeof GithubLogo !== "undefined" && <GithubLogo size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-vscode-muted" />}
               <input
                 data-testid="repo-input"
                 type="text"
@@ -625,7 +605,7 @@ function App() {
                 </>
               ) : (
                 <>
-                  <Lightning size={16} weight="bold" />
+                  {typeof Lightning !== "undefined" && <Lightning size={16} weight="bold" />}
                   <span>Fetch Repository</span>
                 </>
               )}
@@ -639,7 +619,7 @@ function App() {
                 ? 'text-vscode-warning bg-vscode-warning/10 border border-vscode-warning/30' 
                 : 'text-vscode-danger bg-vscode-danger/10 border border-vscode-danger/30'
             }`}>
-              <Warning size={14} className="inline mr-1" />
+              {typeof Warning !== "undefined" && <Warning size={14} className="inline mr-1" />}
               {repoError}
             </div>
           )}
@@ -647,7 +627,7 @@ function App() {
           {/* Demo mode indicator */}
           {isDemoMode && !repoError && (
             <div data-testid="demo-mode-indicator" className="mt-2 text-xs text-vscode-secondary bg-vscode-secondary/10 border border-vscode-secondary/30 rounded-sm p-2">
-              <Lightning size={14} className="inline mr-1" />
+              {typeof Lightning !== "undefined" && <Lightning size={14} className="inline mr-1" />}
               Demo Mode Active
             </div>
           )}
@@ -675,7 +655,7 @@ function App() {
             </div>
           ) : (
             <div className="px-4 py-8 text-center text-vscode-muted text-sm">
-              <GithubLogo size={48} className="mx-auto mb-3 text-vscode-border" />
+              {typeof GithubLogo !== "undefined" && <GithubLogo size={48} className="mx-auto mb-3 text-vscode-border" />}
               <p>Enter a GitHub URL to explore</p>
               <p className="text-xs mt-1">or</p>
               <button
@@ -715,7 +695,7 @@ function App() {
                 onClick={(e) => closeTab(tab.path, e)}
                 className="opacity-0 group-hover:opacity-100 hover:bg-vscode-hover rounded p-0.5 transition-opacity"
               >
-                <X size={14} />
+                {typeof X !== "undefined" && <X size={14} />}
               </button>
             </div>
           ))}
@@ -754,7 +734,7 @@ function App() {
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-vscode-muted h-full">
-              <FileCode size={64} className="mb-4 text-vscode-border" />
+              {typeof FileCode !== "undefined" && <FileCode size={64} className="mb-4 text-vscode-border" />}
               <p className="text-lg">Select a file to view</p>
               <p className="text-sm mt-1">Use the explorer on the left</p>
             </div>
@@ -773,7 +753,7 @@ function App() {
           <div className="panel-section p-4 border-b border-vscode-border">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-mono text-vscode-muted uppercase tracking-widest flex items-center gap-2">
-                <Lightning size={14} />
+                {typeof Lightning !== "undefined" && <Lightning size={14} />}
                 Code Explanation
               </h3>
               <button
@@ -782,7 +762,7 @@ function App() {
                 disabled={!fileContent || loadingExplain}
                 className="bg-vscode-primary text-white hover:bg-[#005f9e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-sm px-3 py-1 text-xs font-medium flex items-center gap-1"
               >
-                {loadingExplain ? <Spinner size={12} /> : <Lightning size={12} />}
+                {loadingExplain ? <Spinner size={12} /> : (typeof Lightning !== "undefined" && <Lightning size={12} />)}
                 Explain
               </button>
             </div>
@@ -813,7 +793,7 @@ function App() {
                 {(codeExplanation.flow || codeExplanation.breakdown) && (codeExplanation.flow || codeExplanation.breakdown).length > 0 && (
                   <div>
                     <h4 className="text-vscode-secondary font-medium mb-1 flex items-center gap-1">
-                      <TreeStructure size={14} /> Logic Flow
+                      {typeof TreeStructure !== "undefined" && <TreeStructure size={14} />} Logic Flow
                     </h4>
                     <div className="space-y-2 mb-4">
                       {(codeExplanation.flow || codeExplanation.breakdown).map((step, i) => (
@@ -846,7 +826,7 @@ function App() {
                     <div className="space-y-1">
                       {codeExplanation.relationships.map((rel, i) => (
                         <p key={i} className="text-vscode-text text-sm flex items-center gap-2">
-                          <Circle size={4} weight="fill" className="text-vscode-primary" /> {rel}
+                          {typeof Circle !== "undefined" && <Circle size={4} weight="fill" className="text-vscode-primary" />} {rel}
                         </p>
                       ))}
                     </div>
@@ -856,7 +836,7 @@ function App() {
                 {codeExplanation.analogy && (
                   <div className="bg-vscode-primary/10 p-3 rounded-sm border border-vscode-primary/20 mb-4">
                     <h4 className="text-vscode-primary font-bold text-xs uppercase tracking-widest mb-1 flex items-center gap-1">
-                      <Lightning size={12} weight="fill" />
+                      {typeof Lightning !== "undefined" && <Lightning size={12} weight="fill" />}
                       Visual Analogy
                     </h4>
                     <p className="text-vscode-text leading-relaxed font-medium">{codeExplanation.analogy}</p>
@@ -879,7 +859,7 @@ function App() {
                 {codeExplanation.commonMistakes && codeExplanation.commonMistakes.length > 0 && (
                   <div className="p-3 rounded-sm border border-vscode-danger/30 bg-vscode-danger/5 mb-4">
                     <h4 className="text-vscode-danger font-bold text-xs uppercase tracking-widest mb-1 flex items-center gap-1">
-                      <Warning size={12} weight="fill" />
+                      {typeof Warning !== "undefined" && <Warning size={12} weight="fill" />}
                       Common Pitfalls
                     </h4>
                     <div className="space-y-1">
@@ -933,7 +913,7 @@ function App() {
           {/* Error Debug Section */}
           <div className="panel-section p-4 border-b border-vscode-border">
             <h3 className="text-xs font-mono text-vscode-muted uppercase tracking-widest flex items-center gap-2 mb-3">
-              <Bug size={14} />
+              {typeof Bug !== "undefined" && <Bug size={14} />}
               Error Debug
             </h3>
             
@@ -951,25 +931,66 @@ function App() {
                 disabled={!errorInput.trim() || loadingError}
                 className="w-full bg-vscode-danger/80 text-white hover:bg-vscode-danger disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-sm px-3 py-1.5 text-sm font-medium flex items-center justify-center gap-2"
               >
-                {loadingError ? <Spinner size={14} /> : <Bug size={14} />}
+                {loadingError ? <Spinner size={14} /> : (typeof Bug !== "undefined" && <Bug size={14} />)}
                 Explain Error
               </button>
             </div>
             
             {errorExplanation && !errorExplanation.error && (
               <div className="explanation-section mt-3 space-y-3 text-sm">
-                <div>
-                  <h4 className="text-vscode-danger font-medium mb-1">Meaning</h4>
-                  <p className="text-vscode-text leading-relaxed">{errorExplanation.meaning}</p>
+                <div className="flex justify-between items-center bg-vscode-input p-2 rounded-sm border border-vscode-border/50">
+                  <div className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-sm ${errorExplanation.severity === 'blocking' ? 'bg-vscode-danger/20 text-vscode-danger' : 'bg-vscode-warning/20 text-vscode-warning'}`}>
+                    {errorExplanation.severity || 'Unknown'} Severity
+                  </div>
+                  <div className="text-[10px] text-vscode-muted uppercase font-mono tracking-tighter">
+                    Category: {errorExplanation.category}
+                  </div>
                 </div>
+
                 <div>
-                  <h4 className="text-vscode-warning font-medium mb-1">Cause</h4>
-                  <p className="text-vscode-text leading-relaxed">{errorExplanation.cause}</p>
+                  <h4 className="text-vscode-danger font-medium mb-1 flex items-center gap-1 uppercase text-[10px] tracking-widest">Meaning</h4>
+                  <p className="text-vscode-text leading-relaxed font-medium">{errorExplanation.meaning}</p>
                 </div>
-                <div>
-                  <h4 className="text-vscode-secondary font-medium mb-1">Fix</h4>
-                  <p className="text-vscode-text leading-relaxed whitespace-pre-line">{errorExplanation.fix}</p>
-                </div>
+
+                {errorExplanation.causes && errorExplanation.causes.length > 0 && (
+                  <div>
+                    <h4 className="text-vscode-warning font-medium mb-1 uppercase text-[10px] tracking-widest">Potential Causes</h4>
+                    <div className="space-y-1">
+                      {errorExplanation.causes.map((cause, i) => (
+                        <p key={i} className="text-vscode-text text-xs leading-relaxed opacity-80">• {cause}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {errorExplanation.fix && (
+                  <div>
+                    <h4 className="text-vscode-primary font-medium mb-1 uppercase text-[10px] tracking-widest">Recommended Fix</h4>
+                    <div className="bg-vscode-bg p-2 rounded-sm border border-vscode-border/30">
+                      {Array.isArray(errorExplanation.fix) ? (
+                        <div className="space-y-1">
+                          {errorExplanation.fix.map((f, i) => (
+                            <div key={i} className="flex gap-2">
+                              <span className="text-vscode-primary font-bold opacity-50">{i + 1}.</span>
+                              <p className="text-vscode-text text-xs">{f}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-vscode-text text-xs whitespace-pre-line">{errorExplanation.fix}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {errorExplanation.example && (
+                  <div>
+                    <h4 className="text-vscode-secondary font-medium mb-1 uppercase text-[10px] tracking-widest">Astra Analogy Code</h4>
+                    <pre className="text-[10px] bg-vscode-input p-2 border border-vscode-border rounded-sm overflow-x-auto font-mono text-vscode-text italic opacity-60">
+                      {errorExplanation.example}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
             
@@ -982,7 +1003,7 @@ function App() {
           <div className="panel-section p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-mono text-vscode-muted uppercase tracking-widest flex items-center gap-2">
-                <TreeStructure size={14} />
+                {typeof TreeStructure !== "undefined" && <TreeStructure size={14} />}
                 Flow Diagram
               </h3>
               <button
@@ -991,7 +1012,7 @@ function App() {
                 disabled={!fileContent || loadingFlow}
                 className="bg-vscode-secondary/80 text-black hover:bg-vscode-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-sm px-3 py-1 text-xs font-medium flex items-center gap-1"
               >
-                {loadingFlow ? <Spinner size={12} /> : <TreeStructure size={12} />}
+                {loadingFlow ? <Spinner size={12} /> : (typeof TreeStructure !== "undefined" && <TreeStructure size={12} />)}
                 Generate
               </button>
             </div>
