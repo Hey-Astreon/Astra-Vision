@@ -178,43 +178,84 @@ export function analyzeCode(parsedData, fileContent = "") {
     confidenceLevel = logs.length > 0 ? "high" : "medium";
   }
 
-  // 7. Strict Behavioral Inference (Zero Assumption Rule)
+  // 7. Strict Behavioral Inference & Educational Precision
   let behavior = "logic flow";
   let confidenceScore = 0;
+  let behaviorDetails = [];
+  let concreteExamples = [];
   const returnStr = returns.join(" ").toLowerCase();
   
-  // Specific Behavior Mapping
-  if (returnStr.includes("+") && (returnStr.includes('"') || returnStr.includes("'") || returnStr.includes("`"))) {
-    behavior = "STRING_BUILDER";
-    confidenceScore = 90;
-  } else if (returnStr.includes("+") || returnStr.includes("-") || returnStr.includes("*") || returnStr.includes("/")) {
-    behavior = "MATH_TRANSFORM";
-    confidenceScore = 90;
+  // Specific Behavior Mapping & Educational Layer
+  if (returnStr.includes("+")) {
+    const hasStrings = returnStr.includes('"') || returnStr.includes("'") || returnStr.includes("`") || allIdentifiers.includes("name") || allIdentifiers.includes("msg");
+    const hasMath = allIdentifiers.includes("sum") || allIdentifiers.includes("total") || allIdentifiers.includes("price") || allIdentifiers.includes("tax");
+    
+    if (hasStrings && !hasMath) {
+      behavior = "STRING_BUILDER";
+      confidenceScore = 95;
+      behaviorDetails = [
+        "First, it takes your text pieces and variables.",
+        "Then, it joins them together in the exact order you provided.",
+        "Finally, it creates a single, combined message."
+      ];
+    } else if (hasMath && !hasStrings) {
+      behavior = "MATH_TRANSFORM";
+      confidenceScore = 95;
+      behaviorDetails = [
+        "First, it identifies the numeric values for calculation.",
+        "Then, it applies the mathematical operation (+, -, *, /).",
+        "Finally, it produces a single numeric result."
+      ];
+    } else {
+      behavior = "COMBINER";
+      confidenceScore = 90;
+      behaviorDetails = [
+        "First, it looks at the two items you're joining.",
+        "If both are numbers, it will ADD them like a calculator.",
+        "If even one is text, it will JOIN them together like a label maker."
+      ];
+      concreteExamples = [
+        { title: "Addition Case", input: "5 + 5", result: "10", note: "Pure math" },
+        { title: "Concatenation Case", input: "'5' + 5", result: "'55'", note: "JavaScript joins them as text when quotes are detected." }
+      ];
+    }
   } else if (fileContent.includes("fetch") || fileContent.includes("axios")) {
     behavior = "DATA_FETCH";
     confidenceScore = 95;
-  } else if (returnStr.includes(".map") || returnStr.includes(".filter") || returnStr.includes(".reduce")) {
+    behaviorDetails = [
+      "First, it reaches out to the URL you provided.",
+      "Then, it waits for the server to send information back.",
+      "Finally, it translates that information into a format your code can use (like JSON)."
+    ];
+  } else if (returnStr.includes(".map") || returnStr.includes(".filter")) {
     behavior = "LIST_TRANSFORMATION";
-    confidenceScore = 90;
+    confidenceScore = 95;
+    behaviorDetails = [
+      "First, it looks at your list of items one by one.",
+      "Then, it applies your logic to each individual item.",
+      "Finally, it builds a brand new list with the updated or filtered items."
+    ];
   }
   
-  // 8. Fact-Based Risk Assessment
+  // 8. Fact-Based Risk Assessment (Pedagogical Focus)
   const risks = [];
-  if (behavior === "MATH_TRANSFORM" || behavior === "STRING_BUILDER") {
-    if (returnStr.includes("+")) risks.push(`Type Coercion: If inputs are strings instead of numbers, JavaScript will concatenate them (e.g., "5" + "5" = "55").`);
+  if (behavior === "MATH_TRANSFORM" || behavior === "COMBINER") {
+    if (returnStr.includes("+")) {
+      risks.push(`Result confusion: If you pass "5" and 5, your result becomes "55" instead of 10. Always double-check your data types!`);
+    }
   }
   if (returnStr.includes(".") && !returnStr.includes("(") && (returnStr.includes("obj") || returnStr.includes("item") || returnStr.includes("data"))) {
-    risks.push("Null Safety: Accessing properties on potentially empty objects may cause crashes.");
+    risks.push("Missing data crash: If your object is empty when you try to access a property (like .name), the whole app will stop.");
   }
 
-  // 9. Pattern Detection (Evidence-based only)
+  // 9. Pattern Detection (Evidence-based & Humble tone)
   const hasSideEffects = logs.length > 0 || fileContent.includes("fetch") || fileContent.includes("axios") || fileContent.includes("useState") || fileContent.includes("useEffect");
   const isPure = functions.length > 0 && !hasSideEffects;
   
-  const designPattern = isPure ? "Stateless Utility" : (hasSideEffects ? "Interactive Logic" : null);
+  const designPattern = isPure ? "it appears to be a Stateless Utility" : (hasSideEffects ? "it appears to handle Interactive Logic" : null);
   const devInsight = isPure 
-    ? "Predictable Logic: This function is 'pure', meaning it gives identical results for identical inputs with no side effects."
-    : (hasSideEffects ? "Stateful Interaction: This code manages external state or observability (logs/network)." : null);
+    ? "Predictable Data: This code appears to be 'pure'. It treats inputs predictably and doesn't change anything outside itself, which prevents bugs."
+    : (hasSideEffects ? "Active Communication: This code manages external signals (like logs or servers) to coordinate with systems outside this file." : null);
 
   // 10. Conditional Learning Hints
   const learningHints = [];
@@ -239,6 +280,8 @@ export function analyzeCode(parsedData, fileContent = "") {
   return {
     purpose: isConfident ? `To implement ${detected.domain} logic.` : "To execute a sequence of instructions.",
     behavior,
+    behaviorDetails,
+    concreteExamples,
     confidenceScore,
     risks,
     designPattern,
@@ -271,16 +314,18 @@ export function generateExplanation(analysis) {
   const behaviorLabels = {
     "MATH_TRANSFORM": "mathematical transformations",
     "STRING_BUILDER": "text and message construction",
+    "COMBINER": "combining different types of data (like numbers and text)",
     "DATA_FETCH": "external data communication",
     "LIST_TRANSFORMATION": "list transformation logic",
     "logic flow": "standard logic flow"
   };
 
-  // 2. Strict Analogy Engine (Zero Assumption)
+  // 2. Precise Analogy Engine
   let analogy = null;
   if (analysis.confidenceScore >= 90) {
     if (analysis.behavior === "MATH_TRANSFORM") analogy = "It acts like a digital calculator: transforming numeric inputs into a calculated result.";
     else if (analysis.behavior === "STRING_BUILDER") analogy = "It acts like a label maker: assembling various text pieces into a final message.";
+    else if (analysis.behavior === "COMBINER") analogy = "It act as a 'Value Combiner': it's smart enough to either add numbers or join text, depending on what you give it.";
     else if (analysis.behavior === "DATA_FETCH") analogy = "It acts like a courier: requesting specific information from a remote location and bringing it back.";
   }
 
@@ -292,8 +337,10 @@ export function generateExplanation(analysis) {
     purpose: analysis.purpose,
     overview: `This ${analysis.difficultyLevel} logic ${hedge}handles ${behaviorLabels[analysis.behavior] || "general operations"}.`,
     breakdown: analysis.flow,
+    behaviorDetails: analysis.behaviorDetails,
+    concreteExamples: analysis.concreteExamples,
     keyConcepts: analysis.concepts,
-    reasoning: analysis.designPattern ? `Architecture: This implements a ${analysis.designPattern}. ${analysis.reasoning}` : analysis.reasoning,
+    reasoning: analysis.designPattern ? `Architecture: This ${analysis.designPattern}. ${analysis.reasoning}` : analysis.reasoning,
     realWorldUsage: analysis.realWorldUsage,
     commonMistakes: analysis.commonMistakes,
     risks: analysis.risks,
@@ -358,9 +405,11 @@ export function explainCode(fileContent) {
       flow: Array.isArray(explanation.breakdown) ? explanation.breakdown : [],
       diagram: diagram || "graph TD\n  A[Start] --> B[Diagram Error]",
       difficulty: explanation.difficultyLevel || "basic",
-      // Pass-through for deep analysis features
+      // Pass-through for pedagogy features
       purpose: explanation.purpose || "",
       reasoning: explanation.reasoning || "",
+      behaviorDetails: explanation.behaviorDetails || [],
+      educationalExamples: explanation.concreteExamples || [],
       commonMistakes: explanation.commonMistakes || [],
       learningHints: explanation.learningHints || [],
       analogy: explanation.analogy || "",

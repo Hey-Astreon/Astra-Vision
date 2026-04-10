@@ -22,7 +22,10 @@ import {
   Graph,
   X,
   GraduationCap,
-  Circle
+  Circle,
+  Play,
+  BookOpen,
+  Info
 } from '@phosphor-icons/react';
 import './App.css';
 import { explainCode, parseCode, analyzeCode, generateDiagram } from './utils/analysisEngine';
@@ -806,6 +809,22 @@ function App() {
                   </div>
                 )}
 
+                {codeExplanation.behaviorDetails && codeExplanation.behaviorDetails.length > 0 && (
+                  <div className="mb-4 bg-vscode-input p-3 rounded-sm border border-vscode-border">
+                    <h4 className="text-vscode-primary font-bold text-[10px] uppercase tracking-widest mb-2 flex items-center gap-1">
+                      {typeof Play !== "undefined" && <Play size={10} weight="fill" />} Step-by-Step Behavior
+                    </h4>
+                    <div className="space-y-2">
+                       {codeExplanation.behaviorDetails.map((detail, i) => (
+                         <p key={i} className="text-vscode-text text-xs flex items-start gap-2">
+                           <span className="bg-vscode-primary/20 text-vscode-primary px-1 rounded-[2px] text-[8px] mt-0.5">{i+1}</span>
+                           {detail}
+                         </p>
+                       ))}
+                    </div>
+                  </div>
+                )}
+
                 {diagramCode && (
                   <div className="mb-4">
                     <h4 className="text-vscode-secondary font-medium mb-2 uppercase text-[10px] tracking-widest">Visual Flow (Diagram)</h4>
@@ -851,6 +870,27 @@ function App() {
                         <span key={i} className="bg-vscode-selected px-2 py-0.5 rounded-sm text-[10px] text-white">
                           {concept}
                         </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {codeExplanation.educationalExamples && codeExplanation.educationalExamples.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-vscode-secondary font-medium mb-2 uppercase text-[10px] tracking-widest flex items-center gap-1">
+                      {typeof BookOpen !== "undefined" && <BookOpen size={12} />} Concrete Examples
+                    </h4>
+                    <div className="space-y-2">
+                      {codeExplanation.educationalExamples.map((ex, i) => (
+                        <div key={i} className="bg-black/20 p-2 rounded-sm border border-vscode-border/50">
+                          <div className="text-[10px] font-bold text-vscode-primary mb-1">{ex.title}</div>
+                          <div className="font-mono text-[11px] mb-1">
+                            <span className="text-vscode-muted">Input:</span> <span className="text-vscode-secondary">{ex.input}</span>
+                            <span className="mx-2 text-vscode-muted">→</span>
+                            <span className="text-vscode-muted">Result:</span> <span className="text-green-400">{ex.result}</span>
+                          </div>
+                          <div className="text-[9px] text-vscode-muted italic">{ex.note}</div>
+                        </div>
                       ))}
                     </div>
                   </div>
