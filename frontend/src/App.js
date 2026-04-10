@@ -28,7 +28,7 @@ import {
   Info
 } from '@phosphor-icons/react';
 import './App.css';
-import { explainCode, parseCode, analyzeCode, generateDiagram, analyzeLine } from './utils/analysisEngine';
+import { explainCode, parseCode, analyzeCode, generateDiagram, explainLine } from './utils/analysisEngine';
 
 // Local Mock AI Logic
 
@@ -582,7 +582,7 @@ function App() {
       const { position } = e.target;
       if (position) {
         const lineContent = editor.getModel().getLineContent(position.lineNumber);
-        const analysis = analyzeLine(lineContent);
+        const analysis = explainLine(lineContent);
         if (analysis) {
           setSelectedLineInfo({
             line: position.lineNumber,
@@ -802,8 +802,8 @@ function App() {
 
               <div className="space-y-3">
                 <div>
-                  <h4 className="text-[9px] uppercase text-vscode-muted font-bold tracking-tight mb-1">What this does</h4>
-                  <p className="text-xs text-vscode-text leading-snug">{selectedLineInfo.explanation}</p>
+                  <h4 className="text-[9px] uppercase text-vscode-muted font-bold tracking-tight mb-1">Meaning</h4>
+                  <p className="text-xs text-vscode-text leading-snug">{selectedLineInfo.meaning}</p>
                 </div>
 
                 {selectedLineInfo.example && (
@@ -816,15 +816,15 @@ function App() {
                 <div className="flex gap-4">
                   <div className="flex-1">
                     <h4 className="text-[9px] uppercase text-vscode-muted font-bold tracking-tight mb-1">Impact</h4>
-                    <p className="text-[10px] text-vscode-muted italic">{selectedLineInfo.affects}</p>
+                    <p className="text-[10px] text-vscode-muted italic">{selectedLineInfo.impact}</p>
                   </div>
                 </div>
 
                 <div className="pt-2 border-t border-vscode-border/30">
                   <h4 className="text-[9px] uppercase text-vscode-warning font-bold tracking-tight mb-1 flex items-center gap-1">
-                    <Warning size={10} /> Safety Note
+                    <Warning size={10} /> Warning
                   </h4>
-                  <p className="text-[10px] text-vscode-text/80">{selectedLineInfo.mistake}</p>
+                  <p className="text-[10px] text-vscode-text/80">{selectedLineInfo.warning}</p>
                 </div>
               </div>
             </div>

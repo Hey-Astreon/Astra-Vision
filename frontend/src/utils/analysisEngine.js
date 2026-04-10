@@ -741,67 +741,74 @@ export function analyzeError(errorMessage, codeContext = "") {
 }
 
 /**
- * 7. analyzeLine(lineContent)
+ * 7. explainLine(lineContent)
  * Granular analysis for line-level interactivity.
  * 
  * @param {string} lineContent - A single line of code
  * @returns {Object} Micro-explanation and behavioral notes
  */
-export function analyzeLine(lineContent) {
+export function explainLine(lineContent) {
   const line = lineContent.trim();
   if (!line || line === "{" || line === "}") return null;
 
-  let explanation = "Executes logic on this line.";
-  let affects = "Changes the internal state of the program.";
-  let mistake = "Ensure syntax is correct and all variables are defined.";
+  let meaning = "Executes logic on this line.";
+  let impact = "Changes the internal state of the program.";
+  let warning = "Ensure syntax is correct and all variables are defined.";
   let example = null;
+
+  // 0. Function Declaration (Requirement)
+  if (line.includes("function") || line.includes("=>")) {
+    meaning = "Defines a reusable block of logic (a function).";
+    impact = "Does nothing until it is called elsewhere in the code.";
+    warning = "Double-check that all parameters are provided when you call it.";
+  }
 
   // 1. Variable Declaration
   const varMatch = line.match(/(const|let|var)\s+(\w+)\s*=\s*(.*)/);
   if (varMatch) {
-    explanation = `Creates a container named '${varMatch[2]}' and initializes it with a value.`;
-    affects = `Defines '${varMatch[2]}' for use in later parts of the code.`;
-    mistake = `Re-assigning a 'const' later will cause a crash. Use 'let' if the value needs to change.`;
+    meaning = `Creates a container named '${varMatch[2]}' and initializes it with a value.`;
+    impact = `Defines '${varMatch[2]}' for use in later parts of the code.`;
+    warning = `Re-assigning a 'const' later will cause a crash. Use 'let' if the value needs to change.`;
   }
 
   // 2. Return Statement
   const retMatch = line.match(/return\s+(.*)/);
   if (retMatch) {
-    explanation = "Sends a value back to the code that called this function.";
-    affects = "Ends the function execution and provides the final output.";
-    mistake = "Code written after this line will never be executed.";
+    meaning = "Sends a value back to the code that called this function.";
+    impact = "Ends the function execution and provides the final output.";
+    warning = "Code written after this line will never be executed.";
   }
 
   // 3. Console Log
   if (line.includes("console.log")) {
-    explanation = "Prints information to the developer console for debugging.";
-    affects = "Does not change data; purely for observation.";
-    mistake = "Forgeting to remove logs in production can slow down your app.";
+    meaning = "Prints information to the developer console for debugging.";
+    impact = "Does not change data; purely for observation.";
+    warning = "Forgeting to remove logs in production can slow down your app.";
   }
 
   // 4. Mathematical Operators (Bonus Category)
   if (line.includes("+")) {
-    explanation = "Combines two values. In JavaScript, this can be addition or text joining.";
-    affects = "Produces a new value based on the types of the inputs.";
+    meaning = "Combines two values. In JavaScript, this can be addition or text joining.";
+    impact = "Produces a new value based on the types of the inputs.";
     example = "5 + 5 = 10 | '5' + 5 = '55'";
-    mistake = "Mixing strings and numbers might lead to unexpected '55' results.";
+    warning = "Mixing strings and numbers might lead to unexpected '55' results.";
   } else if (line.includes("*") || line.includes("/") || line.includes("-")) {
-    explanation = "Performs a mathematical calculation on numeric values.";
-    affects = "Updates or produces a numeric result.";
-    mistake = "Performing math on 'undefined' or 'null' will result in NaN (Not a Number).";
+    meaning = "Performs a mathematical calculation on numeric values.";
+    impact = "Updates or produces a numeric result.";
+    warning = "Performing math on 'undefined' or 'null' will result in NaN (Not a Number).";
   }
 
   // 5. Array Methods
   if (line.includes(".map") || line.includes(".filter")) {
-    explanation = "Transforms or filters a list of items into a new list.";
-    affects = "Creates a new array without changing the original one.";
-    mistake = "Calling this on something that isn't an array will crash the app.";
+    meaning = "Transforms or filters a list of items into a new list.";
+    impact = "Creates a new array without changing the original one.";
+    warning = "Calling this on something that isn't an array will crash the app.";
   }
 
   // 6. Property Access Safety
   if (line.includes(".") && !line.includes("(")) {
-    mistake = "If the object before the '.' is null or undefined, the app will crash.";
+    warning = "If the object before the '.' is null or undefined, the app will crash.";
   }
 
-  return { explanation, affects, mistake, example, code: line };
+  return { meaning, impact, warning, example, code: line };
 }
