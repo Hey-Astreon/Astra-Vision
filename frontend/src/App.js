@@ -25,7 +25,10 @@ import {
   Circle,
   Play,
   BookOpen,
-  Info
+  Info,
+  Terminal,
+  ArrowCounterClockwise,
+  CheckCircle
 } from '@phosphor-icons/react';
 import './App.css';
 import { explainCode, parseCode, analyzeCode, generateDiagram, explainLine } from './utils/analysisEngine';
@@ -980,7 +983,7 @@ function App() {
                 disabled={!fileContent || loadingExplain}
                 className="bg-vscode-primary text-white hover:bg-[#005f9e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-sm px-3 py-1 text-xs font-medium flex items-center gap-1"
               >
-                {loadingExplain ? <Spinner size={12} /> : (typeof Lightning !== "undefined" && <Lightning size={12} />)}
+                {loadingExplain ? <CircleNotch size={12} className="animate-spin" /> : (typeof Lightning !== "undefined" && <Lightning size={12} />)}
                 Explain
               </button>
             </div>
@@ -1213,7 +1216,7 @@ function App() {
                 disabled={!errorInput.trim() || loadingError}
                 className="w-full bg-vscode-danger/80 text-white hover:bg-vscode-danger disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-sm px-3 py-1.5 text-sm font-medium flex items-center justify-center gap-2"
               >
-                {loadingError ? <Spinner size={14} /> : (typeof Bug !== "undefined" && <Bug size={14} />)}
+                {loadingError ? <CircleNotch size={14} className="animate-spin" /> : (typeof Bug !== "undefined" && <Bug size={14} />)}
                 Explain Error
               </button>
             </div>
@@ -1294,7 +1297,7 @@ function App() {
                 disabled={!fileContent || loadingFlow}
                 className="bg-vscode-secondary/80 text-black hover:bg-vscode-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-sm px-3 py-1 text-xs font-medium flex items-center gap-1"
               >
-                {loadingFlow ? <Spinner size={12} /> : (typeof TreeStructure !== "undefined" && <TreeStructure size={12} />)}
+                {loadingFlow ? <CircleNotch size={12} className="animate-spin" /> : (typeof TreeStructure !== "undefined" && <TreeStructure size={12} />)}
                 Generate
               </button>
             </div>
