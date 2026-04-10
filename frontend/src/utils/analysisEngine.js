@@ -205,13 +205,13 @@ export function analyzeCode(parsedData, fileContent = "") {
       behavior = "MATH_TRANSFORM";
       confidenceScore = 95;
       behaviorDetails = [
-        "First, it identifies the numeric values for calculation.",
-        "Then, it applies the mathematical operation.",
-        "Finally, it produces a single numeric result."
+        "First, it identifies the input values (numbers or strings) for calculation.",
+        "Then, it applies the mathematical operation to these specific values.",
+        "Finally, it produces a single result based on the inputs."
       ];
     } else {
       behavior = "COMBINER";
-      confidenceScore = 90;
+      confidenceScore = 95;
       behaviorDetails = [
         "First, it looks at the two items you're joining.",
         "If both are numbers, it will ADD them like a calculator.",
@@ -226,9 +226,9 @@ export function analyzeCode(parsedData, fileContent = "") {
     behavior = "MATH_TRANSFORM";
     confidenceScore = 95;
     behaviorDetails = [
-      "First, it identifies the numeric values for calculation.",
-      "Then, it applies the mathematical operation.",
-      "Finally, it produces a single numeric result."
+      "First, it identifies the input values (numbers or strings) for calculation.",
+      "Then, it applies the mathematical operation to these specific values.",
+      "Finally, it produces a single result based on the inputs."
     ];
   } else if (fileContent.includes("fetch") || fileContent.includes("axios")) {
     behavior = "DATA_FETCH";
@@ -265,7 +265,7 @@ export function analyzeCode(parsedData, fileContent = "") {
   
   const designPattern = isPure ? "it appears to be a Stateless Utility" : (hasSideEffects ? "it appears to handle Interactive Logic" : null);
   const devInsight = isPure 
-    ? "Predictable Data: This code appears to be 'pure'. It treats inputs predictably and doesn't change anything outside itself, which prevents bugs."
+    ? "Predictable Output: This code appears to be 'pure'. It treats inputs predictably and doesn't change anything outside itself, ensuring consistent results."
     : (hasSideEffects ? "Active Communication: This code manages external signals (like logs or servers) to coordinate with systems outside this file." : null);
 
   // 10. Conditional Learning Hints
@@ -324,9 +324,9 @@ export function generateExplanation(analysis) {
 
   // 1. Truth-First Behavioral Labeling
   const behaviorLabels = {
-    "MATH_TRANSFORM": "mathematical transformations",
-    "STRING_BUILDER": "text and message construction",
-    "COMBINER": "combining different types of data (like numbers and text)",
+    "MATH_TRANSFORM": "performing predictable value operations",
+    "STRING_BUILDER": "joining text pieces into a final message",
+    "COMBINER": "joining values with behavior depending on input types (addition vs concatenation)",
     "DATA_FETCH": "external data communication",
     "LIST_TRANSFORMATION": "list transformation logic",
     "logic flow": "standard logic flow"
@@ -365,7 +365,7 @@ export function generateExplanation(analysis) {
     risks: analysis.risks,
     devInsight: analysis.devInsight,
     analogy: analogy,
-    summary: `Astra Verdict: ${analysis.difficultyLevel} script focused on ${behaviorLabels[analysis.behavior] || "logic steps"}.`,
+    summary: `Astra Verdict: This is a simple utility module that performs predictable value operations, with behavior depending on input types.`,
     difficultyLevel: analysis.difficultyLevel,
     relationships: analysis.relationships,
     confidenceLevel: analysis.confidenceLevel,

@@ -8,7 +8,7 @@ console.log("Analogy:", hybridResult.analogy);
 console.log("Behavior Details:", hybridResult.behaviorDetails.join(" "));
 console.log("Examples:", hybridResult.educationalExamples);
 const isPrecise = 
-    hybridResult.overview.includes("combining") && 
+    hybridResult.overview.includes("joining") && 
     hybridResult.analogy.includes("Combiner") &&
     hybridResult.educationalExamples.length >= 2;
 console.log("Precision Check:", isPrecise ? "PASS" : "FAIL");
