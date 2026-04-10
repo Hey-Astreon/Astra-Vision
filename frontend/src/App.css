@@ -116,3 +116,53 @@
   transform: translateY(-50%);
   pointer-events: none;
 }
+
+/* Dynamic Line Intelligence Styles */
+.line-highlight {
+  background-color: rgba(0, 122, 204, 0.15);
+  border-left: 3px solid #007acc;
+  width: 100% !important;
+}
+
+.pulse-focus {
+  animation: pulse-focus 2s infinite;
+}
+
+@keyframes pulse-focus {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 122, 204, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(0, 122, 204, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 122, 204, 0);
+  }
+}
+
+.priority-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 8px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.priority-high {
+  background-color: rgba(241, 76, 76, 0.2);
+  color: #f14c4c;
+  border: 1px solid rgba(241, 76, 76, 0.3);
+}
+
+.priority-medium {
+  background-color: rgba(0, 122, 204, 0.2);
+  color: #4fc1ff;
+  border: 1px solid rgba(0, 122, 204, 0.3);
+}
+
+.priority-low {
+  background-color: rgba(133, 133, 133, 0.2);
+  color: #858585;
+  border: 1px solid rgba(133, 133, 133, 0.3);
+}

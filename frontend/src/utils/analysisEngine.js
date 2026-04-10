@@ -757,16 +757,18 @@ export function explainLine(lineContent) {
   const warnings = [];
   const whys = [];
   let example = null;
+  let priority = "medium";
 
-  // 1. Export Keyword
+  // 1. Export Keyword (Medium)
   if (line.includes("export")) {
     meanings.push("Makes this logic available outside of this file.");
     impacts.push("Allows other parts of your app to reuse this module.");
     whys.push("Helps your application stay modular and allows features to be shared efficiently.");
     warnings.push("If you forget to export, other files won't be able to import it.");
+    priority = "medium";
   }
 
-  // 2. Function Detection (Requirement + Example generation)
+  // 2. Function Detection (Requirement + Smart Contextual Example generation)
   const funcMatch = line.match(/function\s+(\w+)/) || line.match(/const\s+(\w+)\s*=\s*.*=>/);
   if (funcMatch || line.includes("function") || line.includes("=>")) {
     const name = funcMatch ? funcMatch[1] : "myFunction";
@@ -774,53 +776,73 @@ export function explainLine(lineContent) {
     impacts.push("Can be called elsewhere to perform this specific task.");
     whys.push("Helps avoid repeating the same logic multiple times and organizes your tasks.");
     warnings.push("Misusing parameters or forgetting a return can break the expected output.");
-    if (!example) example = `${name}(...) -> executes logic`;
+    // Smart Contextual Example
+    example = `${name}(2, 3) -> calculates result based on inputs`;
+    priority = "medium";
   }
 
-  // 3. Parameters Detection
+  // 3. Parameters Detection (Medium)
   if (line.match(/\(.*\w+.*\)/)) {
     meanings.push("Accepts inputs (parameters) to work with.");
     impacts.push("The inputs directly affect the final result of this line.");
     whys.push("Allows the function to be flexible and work with different data every time.");
     warnings.push("Passing the wrong data type (like a string instead of a number) can cause bugs.");
+    priority = "medium";
   }
 
-  // 4. Return Statement
+  // 4. Return Statement (HIGH PRIORITY)
   if (line.includes("return")) {
     meanings.push("Sends a value back from the function.");
     impacts.push("Controls exactly what data the function outputs.");
     whys.push("Ensures the function gives back a usable result to the rest of your program.");
     warnings.push("If a return is missing, the function will default to 'undefined'.");
+    priority = "high";
   }
 
-  // 5. Operators Logic
+  // 5. Operators Logic (HIGH PRIORITY + SMART DUAL EXAMPLES)
   if (line.includes("+")) {
     meanings.push("Combines values together.");
     impacts.push("Produces a result based on whether inputs are numbers or text.");
     whys.push("Used to join text or calculate values in a single step.");
     warnings.push("Reminder: String + Number = Concatenation (joining text).");
-    example = "5 + 5 = 10 | '5' + 5 = '55'";
+    // Smart Dual Example
+    example = "2 + 3 -> 5 (Math) | '2' + 3 -> '23' (Joining)";
+    priority = "high";
   } else if (line.includes("*") || line.includes("/") || line.includes("-")) {
+    const op = line.includes("*") ? "*" : (line.includes("/") ? "/" : "-");
     meanings.push("Performs a mathematical calculation.");
     impacts.push("Scales or reduces the numeric output.");
     whys.push("Used to perform mathematical transformations on your data efficiently.");
     warnings.push("Using math operators on non-numbers will result in NaN (Not a Number).");
-    if (!example) example = "10 * 2 = 20";
+    // Smart Example showing coercion
+    example = `2 ${op} 3 -> ${op === '*' ? '6' : (op === '/' ? '0.66' : '-1')} | '2' ${op} 3 -> ${op === '*' ? '6' : (op === '/' ? '0.66' : '-1')} (JS converts text to number here)`;
+    priority = "high";
   }
 
-  // 6. Variable Declaration
+  // 6. Conditions (HIGH PRIORITY)
+  if (line.includes("if") || line.includes("?") || line.includes("case")) {
+    meanings.push("Makes a decision based on a condition.");
+    impacts.push("Controls which path the code takes during execution.");
+    whys.push("Allows your program to handle different situations dynamically.");
+    warnings.push("Ensure your condition covers all possible scenarios to avoid unexpected behavior.");
+    priority = "high";
+  }
+
+  // 7. Variable Declaration
   if (line.match(/(const|let|var)\s+\w+\s*=/)) {
     meanings.push("Creates a variable to store information.");
     impacts.push("Saves data so it can be used later in the program.");
     whys.push("Allows the program to remember values and refer to them by name later.");
+    priority = "medium";
   }
 
-  // 7. Fallback Layer (Ensure non-empty)
+  // 8. Fallback Layer (LOW PRIORITY)
   if (meanings.length === 0) {
     meanings.push("Performs a step in the program execution.");
     impacts.push("Contributes to the overall logic of this file.");
     whys.push("Helps build the specific sequence of instructions for your app.");
     warnings.push("Ensure correct syntax and that all variables are defined.");
+    priority = "low";
   }
 
   return { 
@@ -829,6 +851,7 @@ export function explainLine(lineContent) {
     warning: warnings.slice(0, 2).join(" "), 
     why: whys.slice(0, 2).join(" "),
     example, 
+    priority,
     code: line 
   };
 }

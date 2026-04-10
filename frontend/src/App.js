@@ -276,6 +276,7 @@ function App() {
   const [selectedLineInfo, setSelectedLineInfo] = useState(null);
   
   const editorRef = useRef(null);
+  const decorationsRef = useRef([]);
   const [expandedFolders, setExpandedFolders] = useState(new Set());
   const [openTabs, setOpenTabs] = useState([]);
   const [activeTab, setActiveTab] = useState(null);
@@ -588,6 +589,14 @@ function App() {
             line: position.lineNumber,
             ...analysis
           });
+
+          // Phase 6: Dynamic Visual Feedback - Line Highlighting
+          decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [
+            {
+              range: { startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: 1 },
+              options: { isWholeLine: true, className: 'line-highlight' }
+            }
+          ]);
         }
       }
     });
@@ -785,9 +794,14 @@ function App() {
           {selectedLineInfo ? (
             <div className="p-4 border-b border-vscode-border bg-vscode-input/30 animate-in fade-in slide-in-from-top-2 duration-300">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-[10px] font-mono text-vscode-primary uppercase tracking-widest flex items-center gap-1.5">
-                  <Play size={10} weight="fill" /> Line {selectedLineInfo.line} Insight
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[10px] font-mono text-vscode-primary uppercase tracking-widest flex items-center gap-1.5">
+                    <Play size={10} weight="fill" /> Line {selectedLineInfo.line} Insight
+                  </h3>
+                  <span className={`priority-badge priority-${selectedLineInfo.priority}`}>
+                    {selectedLineInfo.priority} Priority
+                  </span>
+                </div>
                 <button 
                   onClick={() => setSelectedLineInfo(null)}
                   className="text-vscode-muted hover:text-white transition-colors"
@@ -812,7 +826,10 @@ function App() {
                 </div>
 
                 {selectedLineInfo.example && (
-                  <div className="bg-vscode-secondary/5 p-2 rounded border border-vscode-secondary/20">
+                  <div 
+                    key={`${selectedLineInfo.line}-${selectedLineInfo.priority}`}
+                    className="bg-vscode-secondary/5 p-2 rounded border border-vscode-secondary/20 pulse-focus"
+                  >
                     <h4 className="text-[9px] uppercase text-vscode-secondary font-bold tracking-tight mb-1">Example Output</h4>
                     <p className="text-[10px] font-mono text-vscode-text">{selectedLineInfo.example}</p>
                   </div>
