@@ -739,3 +739,69 @@ export function analyzeError(errorMessage, codeContext = "") {
 
   return fallback;
 }
+
+/**
+ * 7. analyzeLine(lineContent)
+ * Granular analysis for line-level interactivity.
+ * 
+ * @param {string} lineContent - A single line of code
+ * @returns {Object} Micro-explanation and behavioral notes
+ */
+export function analyzeLine(lineContent) {
+  const line = lineContent.trim();
+  if (!line || line === "{" || line === "}") return null;
+
+  let explanation = "Executes logic on this line.";
+  let affects = "Changes the internal state of the program.";
+  let mistake = "Ensure syntax is correct and all variables are defined.";
+  let example = null;
+
+  // 1. Variable Declaration
+  const varMatch = line.match(/(const|let|var)\s+(\w+)\s*=\s*(.*)/);
+  if (varMatch) {
+    explanation = `Creates a container named '${varMatch[2]}' and initializes it with a value.`;
+    affects = `Defines '${varMatch[2]}' for use in later parts of the code.`;
+    mistake = `Re-assigning a 'const' later will cause a crash. Use 'let' if the value needs to change.`;
+  }
+
+  // 2. Return Statement
+  const retMatch = line.match(/return\s+(.*)/);
+  if (retMatch) {
+    explanation = "Sends a value back to the code that called this function.";
+    affects = "Ends the function execution and provides the final output.";
+    mistake = "Code written after this line will never be executed.";
+  }
+
+  // 3. Console Log
+  if (line.includes("console.log")) {
+    explanation = "Prints information to the developer console for debugging.";
+    affects = "Does not change data; purely for observation.";
+    mistake = "Forgeting to remove logs in production can slow down your app.";
+  }
+
+  // 4. Mathematical Operators (Bonus Category)
+  if (line.includes("+")) {
+    explanation = "Combines two values. In JavaScript, this can be addition or text joining.";
+    affects = "Produces a new value based on the types of the inputs.";
+    example = "5 + 5 = 10 | '5' + 5 = '55'";
+    mistake = "Mixing strings and numbers might lead to unexpected '55' results.";
+  } else if (line.includes("*") || line.includes("/") || line.includes("-")) {
+    explanation = "Performs a mathematical calculation on numeric values.";
+    affects = "Updates or produces a numeric result.";
+    mistake = "Performing math on 'undefined' or 'null' will result in NaN (Not a Number).";
+  }
+
+  // 5. Array Methods
+  if (line.includes(".map") || line.includes(".filter")) {
+    explanation = "Transforms or filters a list of items into a new list.";
+    affects = "Creates a new array without changing the original one.";
+    mistake = "Calling this on something that isn't an array will crash the app.";
+  }
+
+  // 6. Property Access Safety
+  if (line.includes(".") && !line.includes("(")) {
+    mistake = "If the object before the '.' is null or undefined, the app will crash.";
+  }
+
+  return { explanation, affects, mistake, example, code: line };
+}

@@ -28,7 +28,7 @@ import {
   Info
 } from '@phosphor-icons/react';
 import './App.css';
-import { explainCode, parseCode, analyzeCode, generateDiagram } from './utils/analysisEngine';
+import { explainCode, parseCode, analyzeCode, generateDiagram, analyzeLine } from './utils/analysisEngine';
 
 // Local Mock AI Logic
 
@@ -273,6 +273,9 @@ function App() {
   const [repoTree, setRepoTree] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileContent, setFileContent] = useState('');
+  const [selectedLineInfo, setSelectedLineInfo] = useState(null);
+  
+  const editorRef = useRef(null);
   const [expandedFolders, setExpandedFolders] = useState(new Set());
   const [openTabs, setOpenTabs] = useState([]);
   const [activeTab, setActiveTab] = useState(null);
@@ -569,6 +572,31 @@ function App() {
       setLoadingFlow(false);
     }
   };
+
+  // Line-by-line interactive controller
+  const handleEditorMount = (editor) => {
+    editorRef.current = editor;
+    
+    // Requirement Phase 6: Interactive learning click detector
+    editor.onMouseDown((e) => {
+      const { position } = e.target;
+      if (position) {
+        const lineContent = editor.getModel().getLineContent(position.lineNumber);
+        const analysis = analyzeLine(lineContent);
+        if (analysis) {
+          setSelectedLineInfo({
+            line: position.lineNumber,
+            ...analysis
+          });
+        }
+      }
+    });
+
+    // Optional: Reset selection when code changes
+    editor.onDidChangeModelContent(() => {
+      setSelectedLineInfo(null);
+    });
+  };
   
   return (
     <div className="h-screen flex overflow-hidden bg-vscode-bg text-vscode-text font-sans">
@@ -723,6 +751,7 @@ function App() {
               language={getLanguage(selectedFile.name)}
               value={fileContent}
               theme="vs-dark"
+              onMount={handleEditorMount}
               options={{
                 readOnly: true,
                 minimap: { enabled: true },
@@ -752,6 +781,60 @@ function App() {
         </div>
         
         <div className="flex-1 overflow-y-auto">
+          {/* Phase 6: Interactive Line Insights */}
+          {selectedLineInfo ? (
+            <div className="p-4 border-b border-vscode-border bg-vscode-input/30 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-[10px] font-mono text-vscode-primary uppercase tracking-widest flex items-center gap-1.5">
+                  <Play size={10} weight="fill" /> Line {selectedLineInfo.line} Insight
+                </h3>
+                <button 
+                  onClick={() => setSelectedLineInfo(null)}
+                  className="text-vscode-muted hover:text-white transition-colors"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+              
+              <div className="bg-black/40 p-2 rounded border border-vscode-border/50 mb-3 font-mono text-[11px] text-vscode-secondary overflow-x-auto whitespace-nowrap">
+                {selectedLineInfo.code}
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <h4 className="text-[9px] uppercase text-vscode-muted font-bold tracking-tight mb-1">What this does</h4>
+                  <p className="text-xs text-vscode-text leading-snug">{selectedLineInfo.explanation}</p>
+                </div>
+
+                {selectedLineInfo.example && (
+                  <div className="bg-vscode-primary/5 p-2 rounded border border-vscode-primary/20">
+                    <h4 className="text-[9px] uppercase text-vscode-primary font-bold tracking-tight mb-1">Quick Demo</h4>
+                    <p className="text-[10px] font-mono text-vscode-text">{selectedLineInfo.example}</p>
+                  </div>
+                )}
+
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <h4 className="text-[9px] uppercase text-vscode-muted font-bold tracking-tight mb-1">Impact</h4>
+                    <p className="text-[10px] text-vscode-muted italic">{selectedLineInfo.affects}</p>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-vscode-border/30">
+                  <h4 className="text-[9px] uppercase text-vscode-warning font-bold tracking-tight mb-1 flex items-center gap-1">
+                    <Warning size={10} /> Safety Note
+                  </h4>
+                  <p className="text-[10px] text-vscode-text/80">{selectedLineInfo.mistake}</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 border-b border-vscode-border text-center py-8">
+               <Info size={24} className="mx-auto text-vscode-border mb-2" />
+               <p className="text-[11px] text-vscode-muted italic">Click any line in the editor<br/>to explore it deeply.</p>
+            </div>
+          )}
+
           {/* Code Explanation Section */}
           <div className="panel-section p-4 border-b border-vscode-border">
             <div className="flex items-center justify-between mb-3">
