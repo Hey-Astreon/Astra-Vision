@@ -166,3 +166,45 @@
   color: #858585;
   border: 1px solid rgba(133, 133, 133, 0.3);
 }
+
+/* Phase 8 Type Themes */
+.type-string {
+  color: #ce9178;
+}
+
+.type-number {
+  color: #b5cea8;
+}
+
+.bg-string-light {
+  background-color: rgba(206, 145, 120, 0.1);
+}
+
+.bg-number-light {
+  background-color: rgba(181, 206, 168, 0.1);
+}
+
+/* Animations */
+.animate-value-change {
+  animation: value-flash 0.5s ease-out;
+}
+
+@keyframes value-flash {
+  0% { background-color: rgba(255, 255, 255, 0.2); }
+  100% { background-color: transparent; }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.3s ease-out both;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

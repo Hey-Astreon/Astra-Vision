@@ -274,6 +274,11 @@ function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileContent, setFileContent] = useState('');
   const [selectedLineInfo, setSelectedLineInfo] = useState(null);
+  const [playgroundState, setPlaygroundState] = useState({
+    overrides: {},
+    previousResult: null,
+    errors: {}
+  });
   
   const editorRef = useRef(null);
   const decorationsRef = useRef([]);
@@ -583,12 +588,21 @@ function App() {
       const { position } = e.target;
       if (position) {
         const lineContent = editor.getModel().getLineContent(position.lineNumber);
-        const analysis = explainLine(lineContent);
+        const analysis = explainLine(lineContent, playgroundState.overrides);
         if (analysis) {
           setSelectedLineInfo({
             line: position.lineNumber,
             ...analysis
           });
+          
+          // Reset playground state for the new line if it's a different line
+          if (selectedLineInfo?.line !== position.lineNumber) {
+            setPlaygroundState({
+              overrides: {},
+              previousResult: null,
+              errors: {}
+            });
+          }
 
           // Phase 6: Dynamic Visual Feedback - Line Highlighting
           decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [
@@ -848,6 +862,102 @@ function App() {
                   </h4>
                   <p className="text-[10px] text-vscode-text/80">{selectedLineInfo.warning}</p>
                 </div>
+
+                {/* Phase 8: Interactive Playground (Final Form) */}
+                <div className="pt-4 mt-2 border-t border-vscode-border/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-[9px] uppercase text-vscode-primary font-bold tracking-tight flex items-center gap-1.5">
+                      <Terminal size={12} /> Simulation Playground
+                    </h4>
+                    <button 
+                      onClick={() => setPlaygroundState({ overrides: {}, previousResult: null, errors: {} })}
+                      className="text-[9px] text-vscode-muted hover:text-vscode-secondary flex items-center gap-1 transition-colors"
+                    >
+                      <ArrowCounterClockwise size={10} /> Reset
+                    </button>
+                  </div>
+
+                  {/* Variable Inputs */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    {selectedLineInfo.variables?.map(v => (
+                      <div key={v} className="space-y-1">
+                        <label className="text-[9px] text-vscode-muted font-mono">{v}</label>
+                        <div className="relative">
+                          <input 
+                            type="text"
+                            value={playgroundState.overrides[v] !== undefined ? playgroundState.overrides[v] : (selectedLineInfo.parsedValues?.[v]?.value || "")}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const prev = selectedLineInfo.result;
+                              setPlaygroundState(s => ({
+                                ...s,
+                                overrides: { ...s.overrides, [v]: val },
+                                previousResult: prev
+                              }));
+                            }}
+                            className={`w-full bg-vscode-input text-[10px] px-2 py-1 rounded border ${playgroundState.errors[v] ? 'border-vscode-warning/50' : 'border-vscode-border/30'} focus:outline-none focus:border-vscode-primary font-mono transition-all`}
+                            placeholder="Value"
+                          />
+                          {selectedLineInfo.parsedValues?.[v]?.type === "Invalid" && (
+                            <div className="absolute -top-6 left-0 bg-vscode-warning text-black text-[8px] px-1 rounded animate-bounce shadow-lg z-10">
+                              Wrap text in quotes
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Result & Feedback Card */}
+                  <div className={`p-3 rounded border transition-all duration-500 ${selectedLineInfo.status === 'warning' ? 'bg-vscode-secondary/5 border-vscode-secondary/20' : 'bg-vscode-primary/5 border-vscode-primary/20'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                       <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-widest ${selectedLineInfo.resultType === 'String' ? 'bg-vscode-secondary/20 text-vscode-secondary' : 'bg-vscode-primary/20 text-vscode-primary'}`}>
+                        {selectedLineInfo.resultType}
+                       </span>
+                       <div className="text-[10px] font-mono text-vscode-muted">
+                        {playgroundState.previousResult && (
+                          <span className="opacity-50 line-through mr-2">{playgroundState.previousResult}</span>
+                        )}
+                        <span className="text-vscode-text font-bold animate-in fade-in zoom-in duration-300">
+                          {selectedLineInfo.result}
+                        </span>
+                       </div>
+                    </div>
+                    
+                    <div className="flex items-start gap-2">
+                      <div className={`mt-0.5 ${selectedLineInfo.status === 'warning' ? 'text-vscode-secondary' : 'text-vscode-primary'}`}>
+                        {selectedLineInfo.status === 'warning' ? <Warning size={14} /> : <CheckCircle size={14} weight="fill" />}
+                      </div>
+                      <p className="text-[10px] text-vscode-text leading-relaxed">
+                        {selectedLineInfo.feedback}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedLineInfo.steps && selectedLineInfo.steps.length > 0 && (
+                  <div className="pt-3 border-t border-vscode-border/30">
+                    <h4 className="text-[9px] uppercase text-vscode-primary font-bold tracking-tight mb-2 flex items-center gap-1">
+                      <Circle size={10} weight="fill" /> Execution Steps
+                    </h4>
+                    <div className="space-y-2">
+                      {selectedLineInfo.steps.map((step, idx) => (
+                        <div 
+                          key={idx} 
+                          className="flex items-start gap-2 animate-in fade-in slide-in-from-left-2 duration-300"
+                          style={{ animationDelay: `${idx * 150}ms`, animationFillMode: 'both' }}
+                        >
+                          <span className="flex-shrink-0 w-4 h-4 rounded-full bg-vscode-primary/20 text-vscode-primary text-[9px] flex items-center justify-center font-bold">
+                            {idx + 1}
+                          </span>
+                          <p className="text-[10px] text-vscode-text leading-tight pt-0.5">
+                            {step}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : (

@@ -852,6 +852,151 @@ export function explainLine(lineContent) {
     why: whys.slice(0, 2).join(" "),
     example, 
     priority,
+    steps: simulateExecution(line),
     code: line 
   };
+}
+
+/**
+ * 8. simulateExecution(line, overrides)
+ * Refined Phase 8 Engine: Interactive logic simulation with type intelligence.
+ * 
+ * @param {string} line - The raw line of code
+ * @param {Object} overrides - User-defined variable values
+ * @returns {Object} Rich simulation data
+ */
+export function simulateExecution(line, overrides = {}) {
+  const steps = [];
+  const cleanLine = line.trim().replace(/;$/, "");
+  
+  // 1. Smart Identifier Extraction
+  const blacklist = new Set(['return', 'function', 'const', 'let', 'var', 'export', 'import', 'if', 'else', 'console', 'log']);
+  const tokens = cleanLine.match(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\b/g) || [];
+  const detectedVariables = [...new Set(tokens.filter(t => !blacklist.has(t)))];
+
+  // 2. Default Values
+  const defaultValues = {
+    name: "'Alex'",
+    title: "'Hello World'",
+    price: 50,
+    tax: 0.1,
+    count: 2,
+    a: 2,
+    b: 3,
+    x: 10,
+    y: 5
+  };
+
+  const getRawValue = (v) => {
+    if (overrides[v] !== undefined) return overrides[v];
+    return defaultValues[v.toLowerCase()] !== undefined ? defaultValues[v.toLowerCase()].toString() : "1";
+  };
+
+  // 3. Smart Parsing
+  const parsedValues = {};
+  detectedVariables.forEach(v => {
+    parsedValues[v] = parseInputValue(getRawValue(v));
+  });
+
+  // Step 1: Assignment Steps
+  detectedVariables.forEach((v) => {
+    const p = parsedValues[v];
+    steps.push(`${v} = ${p.value} (type: ${p.type})`);
+  });
+
+  // 4. Operation Logic
+  const hasMath = cleanLine.match(/[+\-*/]/);
+  const operator = cleanLine.match(/[+\-*/]/)?.[0];
+  
+  let result = null;
+  let resultType = "Unknown";
+  let feedback = "Executing standard logic step.";
+  let status = "success";
+  let expression = cleanLine;
+
+  if (hasMath && detectedVariables.length >= 2) {
+    const v1 = detectedVariables[0];
+    const v2 = detectedVariables[1];
+    const p1 = parsedValues[v1];
+    const p2 = parsedValues[v2];
+    
+    if (p1.type === "Invalid" || p2.type === "Invalid") {
+      status = "warning";
+      feedback = "One or more inputs are invalid. Wrap text in quotes!";
+    } else {
+      const val1 = p1.parsed;
+      const val2 = p2.parsed;
+      
+      if (operator === '+') {
+        if (typeof val1 === 'string' || typeof val2 === 'string') {
+          result = `"${val1.toString().replace(/['"]/g, '')}${val2.toString().replace(/['"]/g, '')}"`;
+          resultType = "String";
+          feedback = "⚠ JavaScript joined these values as text (concatenation) because a string was detected.";
+          status = "warning";
+        } else {
+          result = val1 + val2;
+          resultType = "Number";
+          feedback = "✔ Logic performed numeric addition.";
+          status = "success";
+        }
+      } else if (operator === '*') {
+        result = val1 * val2;
+        resultType = "Number";
+        feedback = isNaN(result) ? "⚠ Calculation resulted in NaN." : "✔ Multiplied numeric values.";
+      } else if (operator === '/') {
+        result = (val1 / val2).toFixed(2);
+        resultType = "Number";
+      } else if (operator === '-') {
+        result = val1 - val2;
+        resultType = "Number";
+      }
+
+      expression = `${p1.value} ${operator} ${p2.value}`;
+      steps.push(`${expression} = ${result} (${operator === '+' ? 'addition/joining' : 'math'} operation)`);
+      
+      if (cleanLine.includes("return")) {
+        steps.push(`return ${result} (final output)`);
+      }
+    }
+  } else if (cleanLine.includes("return") && detectedVariables.length > 0) {
+    const v = detectedVariables[0];
+    result = parsedValues[v].value;
+    resultType = parsedValues[v].type;
+    steps.push(`return ${result} (final output)`);
+  }
+
+  return { 
+    steps: steps.slice(0, 5), 
+    result: result !== null ? result : "N/A", 
+    resultType, 
+    feedback, 
+    status, 
+    expression,
+    variables: detectedVariables,
+    parsedValues
+  };
+}
+
+/**
+ * 9. parseInputValue(str)
+ * Detects Number, String, or Invalid type.
+ * 
+ * @param {string} str - User input string
+ */
+export function parseInputValue(str) {
+  const val = str.trim();
+  
+  // Check for quoted strings
+  if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+    return { value: val, parsed: val.replace(/['"]/g, ""), type: "String" };
+  }
+  
+  // Check for numbers
+  const num = Number(val);
+  if (!isNaN(num) && val !== "") {
+    return { value: val, parsed: num, type: "Number" };
+  }
+  
+  // Else invalid text
+  return { value: val, parsed: null, type: "Invalid" };
 }
