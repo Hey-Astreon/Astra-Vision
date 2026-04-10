@@ -184,9 +184,12 @@ export function analyzeCode(parsedData, fileContent = "") {
   let behaviorDetails = [];
   let concreteExamples = [];
   const returnStr = returns.join(" ").toLowerCase();
+  const hasPlus = returnStr.includes("+");
+  const hasMinus = returnStr.includes("-");
+  const hasMult = returnStr.includes("*") || returnStr.includes("/");
   
   // Specific Behavior Mapping & Educational Layer
-  if (returnStr.includes("+")) {
+  if (hasPlus) {
     const hasStrings = returnStr.includes('"') || returnStr.includes("'") || returnStr.includes("`") || allIdentifiers.includes("name") || allIdentifiers.includes("msg");
     const hasMath = allIdentifiers.includes("sum") || allIdentifiers.includes("total") || allIdentifiers.includes("price") || allIdentifiers.includes("tax");
     
@@ -203,7 +206,7 @@ export function analyzeCode(parsedData, fileContent = "") {
       confidenceScore = 95;
       behaviorDetails = [
         "First, it identifies the numeric values for calculation.",
-        "Then, it applies the mathematical operation (+, -, *, /).",
+        "Then, it applies the mathematical operation.",
         "Finally, it produces a single numeric result."
       ];
     } else {
@@ -219,6 +222,14 @@ export function analyzeCode(parsedData, fileContent = "") {
         { title: "Concatenation Case", input: "'5' + 5", result: "'55'", note: "JavaScript joins them as text when quotes are detected." }
       ];
     }
+  } else if (hasMinus || hasMult) {
+    behavior = "MATH_TRANSFORM";
+    confidenceScore = 95;
+    behaviorDetails = [
+      "First, it identifies the numeric values for calculation.",
+      "Then, it applies the mathematical operation.",
+      "Finally, it produces a single numeric result."
+    ];
   } else if (fileContent.includes("fetch") || fileContent.includes("axios")) {
     behavior = "DATA_FETCH";
     confidenceScore = 95;
@@ -282,6 +293,7 @@ export function analyzeCode(parsedData, fileContent = "") {
     behavior,
     behaviorDetails,
     concreteExamples,
+    usesPlus: hasPlus,
     confidenceScore,
     risks,
     designPattern,
@@ -322,11 +334,18 @@ export function generateExplanation(analysis) {
 
   // 2. Precise Analogy Engine
   let analogy = null;
-  if (analysis.confidenceScore >= 90) {
-    if (analysis.behavior === "MATH_TRANSFORM") analogy = "It acts like a digital calculator: transforming numeric inputs into a calculated result.";
-    else if (analysis.behavior === "STRING_BUILDER") analogy = "It acts like a label maker: assembling various text pieces into a final message.";
-    else if (analysis.behavior === "COMBINER") analogy = "It act as a 'Value Combiner': it's smart enough to either add numbers or join text, depending on what you give it.";
-    else if (analysis.behavior === "DATA_FETCH") analogy = "It acts like a courier: requesting specific information from a remote location and bringing it back.";
+  const usesPlus = analysis.usesPlus;
+
+  if (analysis.confidenceScore >= 95) {
+    if (analysis.behavior === "MATH_TRANSFORM" && !usesPlus) {
+      analogy = "It acts like a digital calculator: transforming numeric inputs into a calculated result.";
+    } else if (analysis.behavior === "STRING_BUILDER") {
+      analogy = "It acts like a label maker: assembling various text pieces into a final message.";
+    } else if (analysis.behavior === "COMBINER" || (analysis.behavior === "MATH_TRANSFORM" && usesPlus)) {
+      analogy = "It acts as a 'Value Combiner': it joins your items together. Note: This behaves differently depending on input types (adding numbers vs. joining text).";
+    } else if (analysis.behavior === "DATA_FETCH") {
+      analogy = "It acts like a courier: requesting specific information from a remote location and bringing it back.";
+    }
   }
 
   // 3. Language Softening Layer
