@@ -972,7 +972,7 @@ export function simulateExecution(line, overrides = {}) {
     feedback, 
     status, 
     expression,
-    variables: detectedVariables,
+    detectedVariables,
     parsedValues
   };
 }

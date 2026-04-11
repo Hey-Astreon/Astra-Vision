@@ -278,7 +278,7 @@ function App() {
   const [fileContent, setFileContent] = useState('');
   const [selectedLineInfo, setSelectedLineInfo] = useState(null);
   const [playgroundState, setPlaygroundState] = useState({
-    overrides: {},
+    simulationInputs: {},
     previousResult: null,
     errors: {}
   });
@@ -591,7 +591,7 @@ function App() {
       const { position } = e.target;
       if (position) {
         const lineContent = editor.getModel().getLineContent(position.lineNumber);
-        const analysis = explainLine(lineContent, playgroundState.overrides);
+        const analysis = explainLine(lineContent, playgroundState.simulationInputs);
         if (analysis) {
           setSelectedLineInfo({
             line: position.lineNumber,
@@ -601,7 +601,7 @@ function App() {
           // Reset playground state for the new line if it's a different line
           if (selectedLineInfo?.line !== position.lineNumber) {
             setPlaygroundState({
-              overrides: {},
+              simulationInputs: {},
               previousResult: null,
               errors: {}
             });
@@ -873,7 +873,7 @@ function App() {
                       <Terminal size={12} /> Simulation Playground
                     </h4>
                     <button 
-                      onClick={() => setPlaygroundState({ overrides: {}, previousResult: null, errors: {} })}
+                      onClick={() => setPlaygroundState({ simulationInputs: {}, previousResult: null, errors: {} })}
                       className="text-[9px] text-vscode-muted hover:text-vscode-secondary flex items-center gap-1 transition-colors"
                     >
                       <ArrowCounterClockwise size={10} /> Reset
@@ -882,19 +882,19 @@ function App() {
 
                   {/* Variable Inputs */}
                   <div className="grid grid-cols-2 gap-3 mb-4">
-                    {selectedLineInfo.variables?.map(v => (
+                    {selectedLineInfo.detectedVariables?.map(v => (
                       <div key={v} className="space-y-1">
                         <label className="text-[9px] text-vscode-muted font-mono">{v}</label>
                         <div className="relative">
                           <input 
                             type="text"
-                            value={playgroundState.overrides[v] !== undefined ? playgroundState.overrides[v] : (selectedLineInfo.parsedValues?.[v]?.value || "")}
+                            value={playgroundState.simulationInputs[v] !== undefined ? playgroundState.simulationInputs[v] : (selectedLineInfo.parsedValues?.[v]?.value || "")}
                             onChange={(e) => {
                               const val = e.target.value;
                               const prev = selectedLineInfo.result;
                               setPlaygroundState(s => ({
                                 ...s,
-                                overrides: { ...s.overrides, [v]: val },
+                                simulationInputs: { ...s.simulationInputs, [v]: val },
                                 previousResult: prev
                               }));
                             }}
