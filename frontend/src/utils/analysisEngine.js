@@ -748,7 +748,7 @@ export function analyzeError(errorMessage, codeContext = "") {
  * @param {string} lineContent - A single line of code
  * @returns {Object} Micro-explanation and behavioral notes
  */
-export function explainLine(lineContent) {
+export function explainLine(lineContent, overrides = {}) {
   const line = lineContent.trim();
   if (!line || line === "{" || line === "}") return null;
 
@@ -845,6 +845,8 @@ export function explainLine(lineContent) {
     priority = "low";
   }
 
+  const simulation = simulateExecution(line, overrides);
+
   return { 
     meaning: meanings.slice(0, 2).join(" "), 
     impact: impacts.slice(0, 2).join(" "), 
@@ -852,7 +854,7 @@ export function explainLine(lineContent) {
     why: whys.slice(0, 2).join(" "),
     example, 
     priority,
-    steps: simulateExecution(line),
+    ...simulation,
     code: line 
   };
 }

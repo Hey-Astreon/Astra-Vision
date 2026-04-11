@@ -640,10 +640,12 @@ function App() {
   };
 
   // Phase 9: Fully Reactive Simulation Effect
-  // Automatically re-simulate whenever the code or inputs change
   useEffect(() => {
     if (selectedLineInfo?.code) {
+      console.log("Simulating Line:", selectedLineInfo.code);
       const analysis = explainLine(selectedLineInfo.code, playgroundState.simulationInputs);
+      console.log("Analysis Result:", analysis);
+      
       if (analysis) {
         setSelectedLineInfo(prev => ({
           ...prev,
@@ -651,7 +653,7 @@ function App() {
         }));
       }
     }
-  }, [playgroundState.simulationInputs, selectedLineInfo?.code]);
+  }, [playgroundState.simulationInputs, selectedLineInfo?.code, selectedLineInfo?.line]);
 
   // Optional: Reset selection when code changes
   useEffect(() => {
@@ -913,35 +915,41 @@ function App() {
                   </div>
 
                   {/* Variable Inputs */}
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    {selectedLineInfo.detectedVariables?.map(v => (
-                      <div key={v} className="space-y-1">
-                        <label className="text-[9px] text-vscode-muted font-mono">{v}</label>
-                        <div className="relative">
-                          <input 
-                            type="text"
-                            value={playgroundState.simulationInputs[v] !== undefined ? playgroundState.simulationInputs[v] : (selectedLineInfo.parsedValues?.[v]?.value || "")}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const prev = selectedLineInfo.result;
-                              setPlaygroundState(s => ({
-                                ...s,
-                                simulationInputs: { ...s.simulationInputs, [v]: val },
-                                previousResult: prev
-                              }));
-                            }}
-                            className={`w-full bg-vscode-input text-[10px] px-2 py-1 rounded border ${playgroundState.errors[v] ? 'border-vscode-warning/50' : 'border-vscode-border/30'} focus:outline-none focus:border-vscode-primary font-mono transition-all`}
-                            placeholder="Value"
-                          />
-                          {selectedLineInfo.parsedValues?.[v]?.type === "Invalid" && (
-                            <div className="absolute -top-6 left-0 bg-vscode-warning text-black text-[8px] px-1 rounded animate-bounce shadow-lg z-10">
-                              Wrap text in quotes
-                            </div>
-                          )}
+                  {(!selectedLineInfo.detectedVariables || selectedLineInfo.detectedVariables.length === 0) ? (
+                    <div className="p-4 border border-dashed border-vscode-border/30 rounded text-center text-[10px] text-vscode-muted italic mb-4">
+                      Enter values to simulate
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      {selectedLineInfo.detectedVariables.map(v => (
+                        <div key={v} className="space-y-1">
+                          <label className="text-[9px] text-vscode-muted font-mono">{v}</label>
+                          <div className="relative">
+                            <input 
+                              type="text"
+                              value={playgroundState.simulationInputs[v] !== undefined ? playgroundState.simulationInputs[v] : (selectedLineInfo.parsedValues?.[v]?.value || "")}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const prev = selectedLineInfo.result;
+                                setPlaygroundState(s => ({
+                                  ...s,
+                                  simulationInputs: { ...s.simulationInputs, [v]: val },
+                                  previousResult: prev
+                                }));
+                              }}
+                              className={`w-full bg-vscode-input text-[10px] px-2 py-1 rounded border ${playgroundState.errors[v] ? 'border-vscode-warning/50' : 'border-vscode-border/30'} focus:outline-none focus:border-vscode-primary font-mono transition-all`}
+                              placeholder="Value"
+                            />
+                            {selectedLineInfo.parsedValues?.[v]?.type === "Invalid" && (
+                              <div className="absolute -top-6 left-0 bg-vscode-warning text-black text-[8px] px-1 rounded animate-bounce shadow-lg z-10">
+                                Wrap text in quotes
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
 
                   {/* 3 & 4. Dedicated Result Display and Transition Section */}
                   {selectedLineInfo.result !== undefined && (
