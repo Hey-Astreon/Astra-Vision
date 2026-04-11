@@ -898,15 +898,8 @@ function App() {
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-vscode-border/30">
-                  <h4 className="text-[9px] uppercase text-vscode-warning font-bold tracking-tight mb-1 flex items-center gap-1">
-                    <Warning size={10} /> Warning
-                  </h4>
-                  <p className="text-[10px] text-vscode-text/80">{selectedLineInfo.warning}</p>
-                </div>
-
-                {/* Phase 8: Interactive Playground (Final Form) */}
-                <div className="pt-4 mt-2 border-t border-vscode-border/50">
+                {/* 2. Phase 8: Interactive Playground (Final Form) */}
+                <div className="pt-4 mt-4 border-t border-vscode-border/50">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-[9px] uppercase text-vscode-primary font-bold tracking-tight flex items-center gap-1.5">
                       <Terminal size={12} /> Simulation Playground
@@ -950,9 +943,9 @@ function App() {
                     ))}
                   </div>
 
-                  {/* Dedicated Result Section */}
+                  {/* 3 & 4. Dedicated Result Display and Transition Section */}
                   {selectedLineInfo.result !== undefined && (
-                    <div className={`mt-2 mb-4 p-4 rounded-lg border-2 flex flex-col items-center justify-center transition-all duration-500 ${
+                    <div className={`mb-4 p-4 rounded-lg border-2 flex flex-col items-center justify-center transition-all duration-500 ${
                         selectedLineInfo.resultType?.toLowerCase() === 'number' ? 'result-number' : 
                         selectedLineInfo.resultType?.toLowerCase() === 'string' ? 'result-string' : 
                         'bg-gray-800 border-gray-600 text-gray-300'
@@ -976,21 +969,34 @@ function App() {
                     </div>
                   )}
 
-                  {/* Feedback Card */}
-                  <div className={`p-3 rounded border transition-all duration-500 ${selectedLineInfo.status === 'warning' ? 'bg-vscode-secondary/5 border-vscode-secondary/20 text-vscode-secondary' : 'bg-vscode-primary/5 border-vscode-primary/20 text-vscode-primary'}`}>
-                    <div className="flex items-start gap-2">
-                      <div className="mt-0.5">
-                        {selectedLineInfo.status === 'warning' ? <Warning size={14} /> : <CheckCircle size={14} weight="fill" />}
+                  {/* 5. Execution Steps */}
+                  {selectedLineInfo.steps && selectedLineInfo.steps.length > 0 && (
+                    <div className="mb-4 pt-1">
+                      <h4 className="text-[9px] uppercase text-vscode-primary font-bold tracking-tight mb-2 flex items-center gap-1">
+                        <Circle size={10} weight="fill" /> Execution Steps
+                      </h4>
+                      <div className="space-y-2">
+                        {selectedLineInfo.steps.map((step, idx) => (
+                          <div 
+                            key={idx} 
+                            className="flex items-start gap-2 animate-in fade-in slide-in-from-left-2 duration-300"
+                            style={{ animationDelay: `${idx * 150}ms`, animationFillMode: 'both' }}
+                          >
+                            <span className="flex-shrink-0 w-4 h-4 rounded-full bg-vscode-primary/20 text-vscode-primary text-[9px] flex items-center justify-center font-bold">
+                              {idx + 1}
+                            </span>
+                            <p className="text-[10px] text-vscode-text leading-tight pt-0.5">
+                              {step}
+                            </p>
+                          </div>
+                        ))}
                       </div>
-                      <p className="text-[10px] leading-relaxed overflow-hidden">
-                        {selectedLineInfo.feedback}
-                      </p>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Key Insight */}
+                  {/* 6. Key Insight */}
                   {selectedLineInfo.insight && (
-                    <div className="mt-3 p-3 rounded bg-yellow-400/10 border border-yellow-400/20 flex items-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                    <div className="mb-4 p-3 rounded bg-yellow-400/10 border border-yellow-400/20 flex items-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
                        <span className="text-sm mt-px" role="img" aria-label="insight">💡</span>
                        <div>
                          <h5 className="text-[9px] font-bold text-yellow-500/90 uppercase tracking-widest mb-1">Key Insight</h5>
@@ -1000,31 +1006,26 @@ function App() {
                        </div>
                     </div>
                   )}
-                </div>
 
-                {selectedLineInfo.steps && selectedLineInfo.steps.length > 0 && (
-                  <div className="pt-3 border-t border-vscode-border/30">
-                    <h4 className="text-[9px] uppercase text-vscode-primary font-bold tracking-tight mb-2 flex items-center gap-1">
-                      <Circle size={10} weight="fill" /> Execution Steps
-                    </h4>
-                    <div className="space-y-2">
-                      {selectedLineInfo.steps.map((step, idx) => (
-                        <div 
-                          key={idx} 
-                          className="flex items-start gap-2 animate-in fade-in slide-in-from-left-2 duration-300"
-                          style={{ animationDelay: `${idx * 150}ms`, animationFillMode: 'both' }}
-                        >
-                          <span className="flex-shrink-0 w-4 h-4 rounded-full bg-vscode-primary/20 text-vscode-primary text-[9px] flex items-center justify-center font-bold">
-                            {idx + 1}
-                          </span>
-                          <p className="text-[10px] text-vscode-text leading-tight pt-0.5">
-                            {step}
-                          </p>
-                        </div>
-                      ))}
+                  {/* 7. What Could Go Wrong */}
+                  {(selectedLineInfo.warning || selectedLineInfo.status === 'warning') && (
+                    <div className={`p-3 rounded border transition-all duration-500 ${selectedLineInfo.status === 'warning' ? 'bg-vscode-secondary/5 border-vscode-secondary/20 text-vscode-secondary' : 'bg-vscode-warning/10 border-vscode-warning/30 text-vscode-warning'}`}>
+                       <h4 className="text-[9px] uppercase font-bold tracking-tight mb-2 flex items-center gap-1 opacity-80">
+                          <Warning size={10} /> What could go wrong
+                       </h4>
+                       <div className="space-y-2">
+                         {selectedLineInfo.warning && (
+                           <p className="text-[10px] text-vscode-text/80">{selectedLineInfo.warning}</p>
+                         )}
+                         {selectedLineInfo.status === 'warning' && (
+                           <p className="text-[10px] leading-relaxed overflow-hidden font-mono bg-black/20 p-2 rounded text-vscode-secondary/90">
+                             {selectedLineInfo.feedback}
+                           </p>
+                         )}
+                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           ) : (

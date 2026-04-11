@@ -857,34 +857,19 @@ export function explainLine(lineContent) {
   };
 }
 
+// --- SIMULATION PIPELINE LAYERS ---
+
 /**
- * 8. simulateExecution(line, overrides)
- * Refined Phase 8 Engine: Interactive logic simulation with type intelligence.
- * 
- * @param {string} line - The raw line of code
- * @param {Object} overrides - User-defined variable values
- * @returns {Object} Rich simulation data
+ * Layer 1: Input Parsing
+ * Extracts variables and translates overrides to parsed values.
  */
-export function simulateExecution(line, overrides = {}) {
-  const steps = [];
-  const cleanLine = line.trim().replace(/;$/, "");
-  
-  // 1. Smart Identifier Extraction
+function parseInputLayer(lineContext, overrides) {
   const blacklist = new Set(['return', 'function', 'const', 'let', 'var', 'export', 'import', 'if', 'else', 'console', 'log']);
-  const tokens = cleanLine.match(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\b/g) || [];
+  const tokens = lineContext.match(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\b/g) || [];
   const detectedVariables = [...new Set(tokens.filter(t => !blacklist.has(t)))];
 
-  // 2. Default Values
   const defaultValues = {
-    name: "'Alex'",
-    title: "'Hello World'",
-    price: 50,
-    tax: 0.1,
-    count: 2,
-    a: 2,
-    b: 3,
-    x: 10,
-    y: 5
+    name: "'Alex'", title: "'Hello World'", price: 50, tax: 0.1, count: 2, a: 2, b: 3, x: 10, y: 5
   };
 
   const getRawValue = (v) => {
@@ -892,106 +877,149 @@ export function simulateExecution(line, overrides = {}) {
     return defaultValues[v.toLowerCase()] !== undefined ? defaultValues[v.toLowerCase()].toString() : "1";
   };
 
-  // 3. Smart Parsing
   const parsedValues = {};
+  const steps = [];
   detectedVariables.forEach(v => {
-    parsedValues[v] = parseInputValue(getRawValue(v));
-  });
-
-  // Step 1: Assignment Steps
-  detectedVariables.forEach((v) => {
-    const p = parsedValues[v];
+    const p = parseInputValue(getRawValue(v));
+    parsedValues[v] = p;
     steps.push(`${v} = ${p.value} (type: ${p.type})`);
   });
 
-  // 4. Operation Logic
-  const hasMath = cleanLine.match(/[+\-*/]/);
-  const operator = cleanLine.match(/[+\-*/]/)?.[0];
-  
+  return { detectedVariables, parsedValues, assignmentSteps: steps };
+}
+
+/**
+ * Layer 2: Interpretation
+ * Identifies math operations or specific logic intents.
+ */
+function interpretationLayer(lineContext) {
+  const hasMath = !!lineContext.match(/[+\-*/]/);
+  const operator = lineContext.match(/[+\-*/]/)?.[0];
+  return { hasMath, operator };
+}
+
+/**
+ * Layer 3: Simulation
+ * Computes raw execution steps and outcome.
+ */
+function simulationLayer(lineContext, detectedVariables, parsedValues, operator, hasMath) {
   let result = null;
   let resultType = "Unknown";
-  let feedback = "Executing standard logic step.";
-  let status = "success";
-  let expression = cleanLine;
+  let steps = [];
+  let expression = lineContext;
 
   if (hasMath && detectedVariables.length >= 2) {
-    const v1 = detectedVariables[0];
-    const v2 = detectedVariables[1];
-    const p1 = parsedValues[v1];
-    const p2 = parsedValues[v2];
+    const p1 = parsedValues[detectedVariables[0]];
+    const p2 = parsedValues[detectedVariables[1]];
     
-    // We treat invalid inputs as unquoted strings so the simulation doesn't break
-    const val1 = (p1.type === "Invalid") ? p1.value : p1.parsed;
-    const val2 = (p2.type === "Invalid") ? p2.value : p2.parsed;
-
-    if (p1.type === "Invalid" || p2.type === "Invalid") {
-      status = "warning";
-      feedback = "One or more inputs are missing quotes! Treating as raw text for now.";
-      
-      if (operator === '+') {
+    // Fallback unquoted processing
+    const val1 = p1.type === "Invalid" ? p1.value : p1.parsed;
+    const val2 = p2.type === "Invalid" ? p2.value : p2.parsed;
+    
+    if (operator === '+') {
+      if (typeof val1 === 'string' || typeof val2 === 'string') {
         result = `"${String(val1).replace(/['"]/g, '')}${String(val2).replace(/['"]/g, '')}"`;
         resultType = "String";
       } else {
-        result = "NaN";
+        result = val1 + val2;
         resultType = "Number";
       }
-      expression = `${p1.value} ${operator} ${p2.value}`;
-      steps.push(`${expression} = ${result} (fallback joining/math)`);
-      if (cleanLine.includes("return")) {
-        steps.push(`return ${result} (final output)`);
-      }
-    } else {
-      
-      if (operator === '+') {
-        if (typeof val1 === 'string' || typeof val2 === 'string') {
-          result = `"${val1.toString().replace(/['"]/g, '')}${val2.toString().replace(/['"]/g, '')}"`;
-          resultType = "String";
-          feedback = "⚠ JavaScript joined these values as text (concatenation) because a string was detected.";
-          status = "warning";
-        } else {
-          result = val1 + val2;
-          resultType = "Number";
-          feedback = "✔ Logic performed numeric addition.";
-          status = "success";
-        }
-      } else if (operator === '*') {
-        result = val1 * val2;
-        resultType = "Number";
-        feedback = isNaN(result) ? "⚠ Calculation resulted in NaN." : "✔ Multiplied numeric values.";
-      } else if (operator === '/') {
-        result = (val1 / val2).toFixed(2);
-        resultType = "Number";
-      } else if (operator === '-') {
-        result = val1 - val2;
-        resultType = "Number";
-      }
-
-      expression = `${p1.value} ${operator} ${p2.value}`;
-      steps.push(`${expression} = ${result} (${operator === '+' ? 'addition/joining' : 'math'} operation)`);
-      
-      if (cleanLine.includes("return")) {
-        steps.push(`return ${result} (final output)`);
+    } else if (operator === '*') {
+      result = val1 * val2;
+      resultType = "Number";
+    } else if (operator === '/') {
+      result = (val1 / val2).toFixed(2);
+      resultType = "Number";
+    } else if (operator === '-') {
+      result = val1 - val2;
+      resultType = "Number";
+    }
+    
+    if (p1.type === "Invalid" || p2.type === "Invalid") {
+      if (operator !== '+') {
+         result = "NaN";
+         resultType = "Number";
       }
     }
-  } else if (cleanLine.includes("return") && detectedVariables.length > 0) {
+
+    expression = `${p1.value} ${operator} ${p2.value}`;
+    steps.push(`${expression} = ${result} (${operator === '+' ? 'addition/joining' : 'math'} operation)`);
+    if (lineContext.includes("return")) steps.push(`return ${result} (final output)`);
+    
+  } else if (lineContext.includes("return") && detectedVariables.length > 0) {
     const v = detectedVariables[0];
     result = parsedValues[v].value;
     resultType = parsedValues[v].type;
     steps.push(`return ${result} (final output)`);
   }
 
-  const insight = generateKeyInsight(cleanLine, resultType);
+  return { result: result !== null ? result : "N/A", resultType, expression, steps };
+}
 
-  return { 
-    steps: steps.slice(0, 5), 
-    result: result !== null ? result : "N/A", 
-    resultType, 
-    feedback, 
-    status, 
-    expression,
+/**
+ * Layer 4: Feedback
+ * Determines outcome status, pedagogical feedback, and insights.
+ */
+function feedbackLayer(lineContext, simulation, parsedValues, detectedVariables, operator) {
+  let feedback = "Executing standard logic step.";
+  let status = "success";
+  
+  const hasInvalid = detectedVariables.some(v => parsedValues[v].type === "Invalid");
+  
+  if (hasInvalid) {
+    status = "warning";
+    feedback = "One or more inputs are missing quotes! Treating as raw text for now.";
+  } else if (simulation.resultType === "String" && operator === "+") {
+    status = "warning";
+    feedback = "⚠ JavaScript joined these values as text (concatenation) because a string was detected.";
+  } else if (simulation.resultType === "Number" && operator === "+") {
+    status = "success";
+    feedback = "✔ Logic performed numeric addition.";
+  } else if (operator === "*") {
+    feedback = isNaN(simulation.result) ? "⚠ Calculation resulted in NaN." : "✔ Multiplied numeric values.";
+  } else if (operator === "/" || operator === "-") {
+    status = "success";
+    feedback = `✔ Performed ${operator === '/' ? 'division' : 'subtraction'}.`;
+  }
+
+  const insight = generateKeyInsight(lineContext, simulation.resultType);
+
+  return { status, feedback, insight };
+}
+
+/**
+ * 8. simulateExecution(line, overrides)
+ * Orchestrates the structured learning pipeline.
+ * @param {string} line - The raw line of code
+ * @param {Object} overrides - User-defined variable values
+ * @returns {Object} Rich simulation data payload
+ */
+export function simulateExecution(line, overrides = {}) {
+  const lineContext = line.trim().replace(/;$/, "");
+  
+  // 1. Input Layer
+  const { detectedVariables, parsedValues, assignmentSteps } = parseInputLayer(lineContext, overrides);
+  
+  // 2. Interpretation Layer
+  const { hasMath, operator } = interpretationLayer(lineContext);
+  
+  // 3. Simulation Layer
+  const simulation = simulationLayer(lineContext, detectedVariables, parsedValues, operator, hasMath);
+  
+  // 4. Feedback Layer
+  const feedback = feedbackLayer(lineContext, simulation, parsedValues, detectedVariables, operator);
+
+  // Return composited payload
+  return {
+    steps: [...assignmentSteps, ...simulation.steps].slice(0, 5),
+    result: simulation.result,
+    resultType: simulation.resultType,
+    expression: simulation.expression,
+    feedback: feedback.feedback,
+    status: feedback.status,
+    insight: feedback.insight,
     detectedVariables,
-    parsedValues,
-    insight
+    parsedValues
   };
 }
 
