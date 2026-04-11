@@ -741,14 +741,71 @@ export function analyzeError(errorMessage, codeContext = "") {
 }
 
 /**
- * 7. explainLine(lineContent)
- * Smarter rule-based granular analysis for line-level interactivity.
- * Uses a Collector Pattern to identify multiple concepts in a single line.
- * 
- * @param {string} lineContent - A single line of code
- * @returns {Object} Micro-explanation and behavioral notes
+ * Contextual Helpers for Simulation Engine
  */
-export function explainLine(lineContent, overrides = {}) {
+
+const extractParams = (line) => {
+  if (!line) return [];
+  const match = line.match(/\((.*?)\)/);
+  if (!match) return [];
+
+  return match[1]
+    .split(",")
+    .map(v => v.trim())
+    .filter(Boolean);
+};
+
+function isExecutableLine(line) {
+  if (!line) return false;
+  const trimmed = line.trim();
+  
+  // Ignore comments
+  if (trimmed.startsWith("//") || trimmed.startsWith("/*")) return false;
+
+  return (
+    trimmed.startsWith("return") ||
+    trimmed.includes("=") ||
+    /[+\-*/]/.test(trimmed)
+  ) && !trimmed.includes("function") && !trimmed.startsWith("export");
+}
+
+function extractExpression(line) {
+  if (!line || line.includes("function")) return null;
+
+  const match = line.match(/return\s+(.+?);?$/);
+  if (match) return match[1].trim();
+
+  return line
+    .replace(/(const|let|var)\s+\w+\s*=\s*/, '')
+    .replace(/;$/, '')
+    .trim();
+}
+
+function computeExpression(expr, values) {
+  if (!expr) return null;
+  try {
+    const keys = Object.keys(values);
+    const vals = Object.values(values);
+
+    // Context-safe dynamic evaluation using Function constructor
+    // eslint-disable-next-line no-new-func
+    const fn = new Function(...keys, `return ${expr}`);
+    return fn(...vals);
+  } catch (err) {
+    console.error("Evaluation error:", err);
+    return null;
+  }
+}
+
+/**
+ * 7. explainLine(lineContent, overrides, context)
+ * Analyzes a single line of code to provide deep pedagogical context.
+ * 
+ * @param {string} lineContent - The code to explain
+ * @param {Object} overrides - Interactive input values
+ * @param {Object} context - Code context (like parent function header)
+ */
+export function explainLine(lineContent, overrides = {}, context = {}) {
   const line = lineContent.trim();
   if (!line || line === "{" || line === "}") return null;
 
@@ -845,7 +902,8 @@ export function explainLine(lineContent, overrides = {}) {
     priority = "low";
   }
 
-  const simulation = simulateExecution(line, overrides);
+  // Call simulation pipeline with context awareness
+  const simulation = simulateExecution(line, overrides, context);
 
   return { 
     meaning: meanings.slice(0, 2).join(" "), 
@@ -865,10 +923,22 @@ export function explainLine(lineContent, overrides = {}) {
  * Layer 1: Input Parsing
  * Extracts variables and translates overrides to parsed values.
  */
-function parseInputLayer(lineContext, overrides) {
-  const blacklist = new Set(['return', 'function', 'const', 'let', 'var', 'export', 'import', 'if', 'else', 'console', 'log']);
-  const tokens = lineContext.match(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\b/g) || [];
-  const detectedVariables = [...new Set(tokens.filter(t => !blacklist.has(t)))];
+function parseInputLayer(lineContext, overrides, context = {}) {
+  const { contextLine } = context;
+  
+  // 1. Variable Detection: prioritize function parameters if in context
+  let detectedVariables = [];
+  if (contextLine) {
+    detectedVariables = extractParams(contextLine);
+  } else {
+    // Fallback for top-level code
+    const blacklist = new Set(['return', 'function', 'const', 'let', 'var', 'export', 'import', 'if', 'else', 'console', 'log']);
+    const tokens = lineContext.match(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)\b/g) || [];
+    detectedVariables = [...new Set(tokens.filter(t => !blacklist.has(t)))];
+  }
+
+  // 2. Expression Detection
+  const expression = extractExpression(lineContext);
 
   const defaultValues = {
     name: "'Alex'", title: "'Hello World'", price: 50, tax: 0.1, count: 2, a: 2, b: 3, x: 10, y: 5
@@ -880,14 +950,14 @@ function parseInputLayer(lineContext, overrides) {
   };
 
   const parsedValues = {};
-  const steps = [];
+  const assignmentSteps = [];
   detectedVariables.forEach(v => {
     const p = parseInputValue(getRawValue(v));
     parsedValues[v] = p;
-    steps.push(`${v} = ${p.value} (type: ${p.type})`);
+    assignmentSteps.push(`${v} = ${p.value}`);
   });
 
-  return { detectedVariables, parsedValues, assignmentSteps: steps };
+  return { detectedVariables, parsedValues, assignmentSteps, expression };
 }
 
 /**
@@ -902,60 +972,53 @@ function interpretationLayer(lineContext) {
 
 /**
  * Layer 3: Simulation
- * Computes raw execution steps and outcome.
+ * Computes raw execution steps and outcome using dynamic evaluation.
  */
-function simulationLayer(lineContext, detectedVariables, parsedValues, operator, hasMath) {
-  let result = null;
-  let resultType = "Unknown";
-  let steps = [];
-  let expression = lineContext;
+function simulationLayer(activeLine, contextLine, detectedVariables, parsedValues) {
+  const values = {};
+  detectedVariables.forEach(v => {
+    values[v] = parsedValues[v].parsed;
+  });
 
-  if (hasMath && detectedVariables.length >= 2) {
-    const p1 = parsedValues[detectedVariables[0]];
-    const p2 = parsedValues[detectedVariables[1]];
-    
-    // Fallback unquoted processing
-    const val1 = p1.type === "Invalid" ? p1.value : p1.parsed;
-    const val2 = p2.type === "Invalid" ? p2.value : p2.parsed;
-    
-    if (operator === '+') {
-      if (typeof val1 === 'string' || typeof val2 === 'string') {
-        result = `"${String(val1).replace(/['"]/g, '')}${String(val2).replace(/['"]/g, '')}"`;
-        resultType = "String";
-      } else {
-        result = val1 + val2;
-        resultType = "Number";
-      }
-    } else if (operator === '*') {
-      result = val1 * val2;
-      resultType = "Number";
-    } else if (operator === '/') {
-      result = (val1 / val2).toFixed(2);
-      resultType = "Number";
-    } else if (operator === '-') {
-      result = val1 - val2;
-      resultType = "Number";
-    }
-    
-    if (p1.type === "Invalid" || p2.type === "Invalid") {
-      if (operator !== '+') {
-         result = "NaN";
-         resultType = "Number";
-      }
-    }
+  const expr = extractExpression(activeLine);
+  
+  // Mandatory Debug Logs
+  console.log("Context Line (for params):", contextLine);
+  console.log("Active Line (for expression):", activeLine);
+  console.log("Extracted Expression:", expr);
+  console.log("Values:", values);
 
-    expression = `${p1.value} ${operator} ${p2.value}`;
-    steps.push(`${expression} = ${result} (${operator === '+' ? 'addition/joining' : 'math'} operation)`);
-    if (lineContext.includes("return")) steps.push(`return ${result} (final output)`);
-    
-  } else if (lineContext.includes("return") && detectedVariables.length > 0) {
-    const v = detectedVariables[0];
-    result = parsedValues[v].value;
-    resultType = parsedValues[v].type;
-    steps.push(`return ${result} (final output)`);
+  // Safety Check: Avoid evaluating non-executable lines
+  if (!expr) {
+    console.warn("No valid expression found for this line.");
+    return {
+      result: "N/A",
+      resultType: "undefined",
+      status: "warning",
+      expression: null,
+      steps: []
+    };
   }
 
-  return { result: result !== null ? result : "N/A", resultType, expression, steps };
+  const result = computeExpression(expr, values);
+  console.log("Computed Result:", result);
+
+  let finalResult = "N/A";
+  if (result === null || result === undefined || Number.isNaN(result)) {
+    finalResult = "N/A";
+  } else {
+    finalResult = result;
+  }
+
+  const steps = [];
+  steps.push(`${expr} = ${finalResult}`);
+
+  return { 
+    result: finalResult, 
+    resultType: typeof finalResult, 
+    expression: expr, 
+    steps 
+  };
 }
 
 /**
@@ -990,26 +1053,89 @@ function feedbackLayer(lineContext, simulation, parsedValues, detectedVariables,
 }
 
 /**
- * 8. simulateExecution(line, overrides)
+ * 8. simulateExecution(line, overrides, context)
  * Orchestrates the structured learning pipeline.
  * @param {string} line - The raw line of code
  * @param {Object} overrides - User-defined variable values
+ * @param {Object} context - Code context
  * @returns {Object} Rich simulation data payload
  */
-export function simulateExecution(line, overrides = {}) {
-  const lineContext = line.trim().replace(/;$/, "");
+export function simulateExecution(line, overrides = {}, context = {}) {
+  const activeLine = line.trim().replace(/;$/, "");
   
-  // 1. Input Layer
-  const { detectedVariables, parsedValues, assignmentSteps } = parseInputLayer(lineContext, overrides);
+  const isFunction = activeLine.includes("function") || (activeLine.includes("const") && activeLine.includes("=>"));
+
+  if (isFunction) {
+    const params = extractParams(activeLine);
+    
+    // Auto-evaluate if we found a return line
+    let simulationSteps = [];
+    let finalResult = null;
+    let finalResultType = "undefined";
+    let expr = null;
+    let parsedVals = {};
+    let assignmentSteps = [];
+    let feedbackStr = "Function detected. Enter values to simulate.";
+    let statusStr = "idle";
+    
+    if (context.returnLine) {
+        const parseRes = parseInputLayer(context.returnLine, overrides, { contextLine: activeLine });
+        parsedVals = parseRes.parsedValues;
+        assignmentSteps = parseRes.assignmentSteps;
+        expr = extractExpression(context.returnLine);
+        
+        const simRes = simulationLayer(context.returnLine, activeLine, parseRes.detectedVariables, parseRes.parsedValues);
+        finalResult = simRes.result;
+        finalResultType = simRes.resultType;
+        simulationSteps = simRes.steps;
+        statusStr = "success";
+        feedbackStr = "✔ Auto-evaluating function return line.";
+    } else {
+        const parseRes = parseInputLayer(activeLine, overrides, { contextLine: activeLine });
+        parsedVals = parseRes.parsedValues;
+        assignmentSteps = parseRes.assignmentSteps;
+    }
+
+    return {
+      type: "function",
+      message: "Function detected. Enter values to simulate.",
+      detectedVariables: params,
+      parsedValues: parsedVals,
+      assignmentSteps: assignmentSteps,
+      expression: expr,
+      result: finalResult,
+      resultType: finalResultType,
+      steps: [...assignmentSteps, ...simulationSteps].slice(0, 5),
+      feedback: feedbackStr,
+      status: statusStr,
+      insight: "Modifying inputs runs the simulation on the function's return logic.",
+      hidePlayground: false
+    };
+  }
+
+  // Execution Guard: Detect if we should show the playground
+  if (!isExecutableLine(activeLine)) {
+    return {
+      result: null,
+      resultType: "idle",
+      status: "idle",
+      message: "No executable logic on this line",
+      hidePlayground: true,
+      steps: []
+    };
+  }
+
+  // 1. Input Layer: Handle parameters from context
+  const { detectedVariables, parsedValues, assignmentSteps, expression } = parseInputLayer(activeLine, overrides, context);
   
   // 2. Interpretation Layer
-  const { hasMath, operator } = interpretationLayer(lineContext);
+  const { hasMath, operator } = interpretationLayer(activeLine);
   
-  // 3. Simulation Layer
-  const simulation = simulationLayer(lineContext, detectedVariables, parsedValues, operator, hasMath);
+  // 3. Simulation Layer: Dynamic eval logic (Strict Separation)
+  const simulation = simulationLayer(activeLine, context.contextLine, detectedVariables, parsedValues);
   
   // 4. Feedback Layer
-  const feedback = feedbackLayer(lineContext, simulation, parsedValues, detectedVariables, operator);
+  const feedback = feedbackLayer(activeLine, simulation, parsedValues, detectedVariables, operator);
 
   // Return composited payload
   return {

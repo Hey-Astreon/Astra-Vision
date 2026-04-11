@@ -604,15 +604,46 @@ function App() {
     editor.onMouseDown((e) => {
       const { position } = e.target;
       if (position) {
-        const lineContent = editor.getModel().getLineContent(position.lineNumber);
+        const model = editor.getModel();
+        const lineContent = model.getLineContent(position.lineNumber);
         
-        // Update selected line info
+        // Context Awareness: Find the nearest function header above the selected line
+        let contextLine = null;
+        let activeReturnLine = null;
+        const isFunctionLine = lineContent.includes('function') || (lineContent.includes('const') && lineContent.includes('=>'));
+
+        if (isFunctionLine) {
+          contextLine = lineContent;
+          // BONUS: Scan below for return statement
+          for (let i = position.lineNumber + 1; i <= model.getLineCount(); i++) {
+            const l = model.getLineContent(i);
+            if (l.trim().startsWith('return')) {
+              activeReturnLine = l;
+              break;
+            }
+            if (l.includes('function') || (l.includes('const') && l.includes('=>'))) {
+              break; // Stop scanning if another function starts
+            }
+          }
+        } else {
+          for (let i = position.lineNumber; i >= 1; i--) {
+            const l = model.getLineContent(i);
+            if (l.includes('function') || (l.includes('const') && l.includes('=>'))) {
+              contextLine = l;
+              break;
+            }
+          }
+        }
+        
+        // Update selected line info with context
         setSelectedLineInfo(prev => {
           const isSameLine = prev?.line === (position?.lineNumber || null);
           return {
             line: position.lineNumber,
             code: lineContent,
-            ...(isSameLine ? prev : { steps: [], result: null, feedback: null }) // Reset results for new line
+            contextLine: contextLine, // Pass the parent function header
+            returnLine: activeReturnLine, // BONUS: Pass found return line if any
+            ...(isSameLine ? prev : { steps: [], result: null, feedback: null })
           };
         });
         
@@ -643,7 +674,14 @@ function App() {
   useEffect(() => {
     if (selectedLineInfo?.code) {
       console.log("Simulating Line:", selectedLineInfo.code);
-      const analysis = explainLine(selectedLineInfo.code, playgroundState.simulationInputs);
+      const analysis = explainLine(
+        selectedLineInfo.code, 
+        playgroundState.simulationInputs,
+        { 
+          contextLine: selectedLineInfo.contextLine,
+          returnLine: selectedLineInfo.returnLine
+        }
+      );
       console.log("Analysis Result:", analysis);
       
       if (analysis) {
@@ -906,82 +944,98 @@ function App() {
                     <h4 className="text-[9px] uppercase text-vscode-primary font-bold tracking-tight flex items-center gap-1.5">
                       <Terminal size={12} /> Simulation Playground
                     </h4>
-                    <button 
-                      onClick={() => setPlaygroundState({ simulationInputs: {}, previousResult: null, errors: {} })}
-                      className="text-[9px] text-vscode-muted hover:text-vscode-secondary flex items-center gap-1 transition-colors"
-                    >
-                      <ArrowCounterClockwise size={10} /> Reset
-                    </button>
+                    {!selectedLineInfo.hidePlayground && (
+                      <button 
+                        onClick={() => setPlaygroundState({ simulationInputs: {}, previousResult: null, errors: {} })}
+                        className="text-[9px] text-vscode-muted hover:text-vscode-secondary flex items-center gap-1 transition-colors"
+                      >
+                        <ArrowCounterClockwise size={10} /> Reset
+                      </button>
+                    )}
                   </div>
 
-                  {/* Variable Inputs */}
-                  {(!selectedLineInfo.detectedVariables || selectedLineInfo.detectedVariables.length === 0) ? (
-                    <div className="p-4 border border-dashed border-vscode-border/30 rounded text-center text-[10px] text-vscode-muted italic mb-4">
-                      Enter values to simulate
+                  {selectedLineInfo.hidePlayground ? (
+                    <div className="p-6 border border-dashed border-vscode-border/30 rounded-lg text-center bg-vscode-secondary/5 group transition-all">
+                      <div className="flex justify-center mb-2">
+                        <Terminal size={24} className="text-vscode-muted group-hover:text-vscode-primary transition-colors duration-500" />
+                      </div>
+                      <p className="text-[11px] text-vscode-text font-medium mb-1">
+                        {selectedLineInfo.message || "No executable logic on this line"}
+                      </p>
+                      <p className="text-[10px] text-vscode-muted italic">
+                        Click on a return, assignment, or expression line to simulate execution.
+                      </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      {selectedLineInfo.detectedVariables.map(v => (
-                        <div key={v} className="space-y-1">
-                          <label className="text-[9px] text-vscode-muted font-mono">{v}</label>
-                          <div className="relative">
-                            <input 
-                              type="text"
-                              value={playgroundState.simulationInputs[v] !== undefined ? playgroundState.simulationInputs[v] : (selectedLineInfo.parsedValues?.[v]?.value || "")}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                const prev = selectedLineInfo.result;
-                                setPlaygroundState(s => ({
-                                  ...s,
-                                  simulationInputs: { ...s.simulationInputs, [v]: val },
-                                  previousResult: prev
-                                }));
-                              }}
-                              className={`w-full bg-vscode-input text-[10px] px-2 py-1 rounded border ${playgroundState.errors[v] ? 'border-vscode-warning/50' : 'border-vscode-border/30'} focus:outline-none focus:border-vscode-primary font-mono transition-all`}
-                              placeholder="Value"
-                            />
-                            {selectedLineInfo.parsedValues?.[v]?.type === "Invalid" && (
-                              <div className="absolute -top-6 left-0 bg-vscode-warning text-black text-[8px] px-1 rounded animate-bounce shadow-lg z-10">
-                                Wrap text in quotes
+                    <>
+                      {/* Variable Inputs */}
+                      {(!selectedLineInfo.detectedVariables || selectedLineInfo.detectedVariables.length === 0) ? (
+                        <div className="p-4 border border-dashed border-vscode-border/30 rounded text-center text-[10px] text-vscode-muted italic mb-4">
+                          Enter values to simulate
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                          {selectedLineInfo.detectedVariables.map(v => (
+                            <div key={v} className="space-y-1">
+                              <label className="text-[9px] text-vscode-muted font-mono">{v}</label>
+                              <div className="relative">
+                                <input 
+                                  type="text"
+                                  value={playgroundState.simulationInputs[v] !== undefined ? playgroundState.simulationInputs[v] : (selectedLineInfo.parsedValues?.[v]?.value || "")}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const prev = selectedLineInfo.result;
+                                    setPlaygroundState(s => ({
+                                      ...s,
+                                      simulationInputs: { ...s.simulationInputs, [v]: val },
+                                      previousResult: prev
+                                    }));
+                                  }}
+                                  className={`w-full bg-vscode-input text-[10px] px-2 py-1 rounded border ${playgroundState.errors[v] ? 'border-vscode-warning/50' : 'border-vscode-border/30'} focus:outline-none focus:border-vscode-primary font-mono transition-all`}
+                                  placeholder="Value"
+                                />
+                                {selectedLineInfo.parsedValues?.[v]?.type === "Invalid" && (
+                                  <div className="absolute -top-6 left-0 bg-vscode-warning text-black text-[8px] px-1 rounded animate-bounce shadow-lg z-10">
+                                    Wrap text in quotes
+                                  </div>
+                                )}
                               </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 3 & 4. Dedicated Result Display and Transition Section */}
+                      {selectedLineInfo.result !== undefined && selectedLineInfo.result !== null && (
+                        <div 
+                          key={selectedLineInfo.resultType} /* Re-animates when type changes */
+                          className={`mb-4 p-4 rounded-lg border-2 flex flex-col items-center justify-center transition-all duration-500 animate-in fade-in zoom-in-95 ${
+                            selectedLineInfo.resultType?.toLowerCase() === 'number' ? 'bg-[#007acc]/10 border-[#007acc]/30 text-[#4fc1ff]' : 
+                            selectedLineInfo.resultType?.toLowerCase() === 'string' ? 'bg-[#ce9178]/10 border-[#ce9178]/30 text-[#ce9178]' : 
+                            'bg-gray-800 border-gray-600 text-gray-300'
+                        }`}>
+                          <span className="text-[10px] font-bold uppercase mb-1 opacity-70 tracking-widest">
+                            {selectedLineInfo.resultType} Result
+                          </span>
+                          <div className="flex items-center gap-3 mt-1" key={selectedLineInfo.result}>
+                            {playgroundState.previousResult !== null && playgroundState.previousResult !== undefined && playgroundState.previousResult !== selectedLineInfo.result && (
+                              <>
+                                <span className="text-xl font-mono font-bold opacity-40 line-through truncate max-w-[100px]">
+                                  {typeof playgroundState.previousResult === 'string' || selectedLineInfo.resultType?.toLowerCase() === 'string' ? `"${playgroundState.previousResult}"` : playgroundState.previousResult}
+                                </span>
+                                <span className="text-vscode-muted text-xl animate-in fade-in zoom-in duration-300">→</span>
+                              </>
                             )}
+                            <span className="text-2xl font-mono font-bold animate-in fade-in slide-in-from-right-4 duration-500 truncate max-w-[200px]">
+                               {selectedLineInfo.resultType?.toLowerCase() === 'string' ? `"${selectedLineInfo.result}"` : selectedLineInfo.result}
+                            </span>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      )}
 
-                  {/* 3 & 4. Dedicated Result Display and Transition Section */}
-                  {selectedLineInfo.result !== undefined && (
-                    <div 
-                      key={selectedLineInfo.resultType} /* Re-animates when type changes */
-                      className={`mb-4 p-4 rounded-lg border-2 flex flex-col items-center justify-center transition-all duration-500 animate-in fade-in zoom-in-95 ${
-                        selectedLineInfo.resultType?.toLowerCase() === 'number' ? 'bg-[#007acc]/10 border-[#007acc]/30 text-[#4fc1ff]' : 
-                        selectedLineInfo.resultType?.toLowerCase() === 'string' ? 'bg-[#ce9178]/10 border-[#ce9178]/30 text-[#ce9178]' : 
-                        'bg-gray-800 border-gray-600 text-gray-300'
-                    }`}>
-                      <span className="text-[10px] font-bold uppercase mb-1 opacity-70 tracking-widest">
-                        {selectedLineInfo.resultType} Result
-                      </span>
-                      <div className="flex items-center gap-3 mt-1" key={selectedLineInfo.result}>
-                        {playgroundState.previousResult !== null && playgroundState.previousResult !== undefined && playgroundState.previousResult !== selectedLineInfo.result && (
-                          <>
-                            <span className="text-xl font-mono font-bold opacity-40 line-through truncate max-w-[100px]">
-                              {typeof playgroundState.previousResult === 'string' || selectedLineInfo.resultType?.toLowerCase() === 'string' ? `"${playgroundState.previousResult}"` : playgroundState.previousResult}
-                            </span>
-                            <span className="text-vscode-muted text-xl animate-in fade-in zoom-in duration-300">→</span>
-                          </>
-                        )}
-                        <span className="text-2xl font-mono font-bold animate-in fade-in slide-in-from-right-4 duration-500 truncate max-w-[200px]">
-                           {selectedLineInfo.resultType?.toLowerCase() === 'string' ? `"${selectedLineInfo.result}"` : selectedLineInfo.result}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Feedback Card (Type-Aware) */}
-                  {selectedLineInfo.feedback && (
-                     <div className={`p-3 rounded border transition-all duration-500 mb-4 ${
+                      {/* Feedback Card (Type-Aware) */}
+                      {selectedLineInfo.feedback && (
+                         <div className={`p-3 rounded border transition-all duration-500 mb-4 ${
                        selectedLineInfo.status === 'warning' ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' :
                        selectedLineInfo.resultType?.toLowerCase() === 'number' ? 'bg-[#007acc]/10 border-[#007acc]/30 text-[#4fc1ff]' :
                        selectedLineInfo.resultType?.toLowerCase() === 'string' ? 'bg-[#ce9178]/10 border-[#ce9178]/30 text-[#ce9178]' :
@@ -1044,13 +1098,15 @@ function App() {
                        </h4>
                        <p className="text-[10px] text-amber-500/90 leading-relaxed font-mono">
                          {selectedLineInfo.warning}
-                       </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
+                        </p>
+                     </div>
+                   )}
+                 </>
+               )}
+             </div>
+           </div>
+         </div>
+       ) : (
             <div className="p-4 border-b border-vscode-border text-center py-8">
                <Info size={24} className="mx-auto text-vscode-border mb-2" />
                <p className="text-[11px] text-vscode-muted italic">Click any line in the editor<br/>to explore it deeply.</p>
