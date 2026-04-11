@@ -945,9 +945,11 @@ function App() {
 
                   {/* 3 & 4. Dedicated Result Display and Transition Section */}
                   {selectedLineInfo.result !== undefined && (
-                    <div className={`mb-4 p-4 rounded-lg border-2 flex flex-col items-center justify-center transition-all duration-500 ${
-                        selectedLineInfo.resultType?.toLowerCase() === 'number' ? 'result-number' : 
-                        selectedLineInfo.resultType?.toLowerCase() === 'string' ? 'result-string' : 
+                    <div 
+                      key={selectedLineInfo.resultType} /* Re-animates when type changes */
+                      className={`mb-4 p-4 rounded-lg border-2 flex flex-col items-center justify-center transition-all duration-500 animate-in fade-in zoom-in-95 ${
+                        selectedLineInfo.resultType?.toLowerCase() === 'number' ? 'bg-[#007acc]/10 border-[#007acc]/30 text-[#4fc1ff]' : 
+                        selectedLineInfo.resultType?.toLowerCase() === 'string' ? 'bg-[#ce9178]/10 border-[#ce9178]/30 text-[#ce9178]' : 
                         'bg-gray-800 border-gray-600 text-gray-300'
                     }`}>
                       <span className="text-[10px] font-bold uppercase mb-1 opacity-70 tracking-widest">
@@ -969,6 +971,25 @@ function App() {
                     </div>
                   )}
 
+                  {/* Feedback Card (Type-Aware) */}
+                  {selectedLineInfo.feedback && (
+                     <div className={`p-3 rounded border transition-all duration-500 mb-4 ${
+                       selectedLineInfo.status === 'warning' ? 'bg-amber-500/10 border-amber-500/30 text-amber-500' :
+                       selectedLineInfo.resultType?.toLowerCase() === 'number' ? 'bg-[#007acc]/10 border-[#007acc]/30 text-[#4fc1ff]' :
+                       selectedLineInfo.resultType?.toLowerCase() === 'string' ? 'bg-[#ce9178]/10 border-[#ce9178]/30 text-[#ce9178]' :
+                       'bg-green-500/10 border-green-500/30 text-green-400'
+                     }`}>
+                        <div className="flex items-start gap-2 animate-in fade-in zoom-in duration-300" key={selectedLineInfo.feedback}>
+                          <div className="mt-0.5">
+                            {selectedLineInfo.status === 'warning' ? <Warning size={14} /> : <CheckCircle size={14} weight="fill" />}
+                          </div>
+                          <p className="text-[10px] leading-relaxed overflow-hidden font-mono">
+                            {selectedLineInfo.feedback}
+                          </p>
+                        </div>
+                     </div>
+                  )}
+
                   {/* 5. Execution Steps */}
                   {selectedLineInfo.steps && selectedLineInfo.steps.length > 0 && (
                     <div className="mb-4 pt-1">
@@ -978,7 +999,7 @@ function App() {
                       <div className="space-y-2">
                         {selectedLineInfo.steps.map((step, idx) => (
                           <div 
-                            key={idx} 
+                            key={`${selectedLineInfo.expression}-${step}-${idx}`} 
                             className="flex items-start gap-2 animate-in fade-in slide-in-from-left-2 duration-300"
                             style={{ animationDelay: `${idx * 150}ms`, animationFillMode: 'both' }}
                           >
@@ -996,7 +1017,7 @@ function App() {
 
                   {/* 6. Key Insight */}
                   {selectedLineInfo.insight && (
-                    <div className="mb-4 p-3 rounded bg-yellow-400/10 border border-yellow-400/20 flex items-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                    <div className="mb-4 p-3 rounded bg-yellow-400/10 border border-yellow-400/20 flex items-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-500" key={selectedLineInfo.insight}>
                        <span className="text-sm mt-px" role="img" aria-label="insight">💡</span>
                        <div>
                          <h5 className="text-[9px] font-bold text-yellow-500/90 uppercase tracking-widest mb-1">Key Insight</h5>
@@ -1008,21 +1029,14 @@ function App() {
                   )}
 
                   {/* 7. What Could Go Wrong */}
-                  {(selectedLineInfo.warning || selectedLineInfo.status === 'warning') && (
-                    <div className={`p-3 rounded border transition-all duration-500 ${selectedLineInfo.status === 'warning' ? 'bg-vscode-secondary/5 border-vscode-secondary/20 text-vscode-secondary' : 'bg-vscode-warning/10 border-vscode-warning/30 text-vscode-warning'}`}>
+                  {selectedLineInfo.warning && (
+                    <div className="p-3 rounded border transition-all duration-500 bg-amber-500/10 border-amber-500/30 text-amber-500">
                        <h4 className="text-[9px] uppercase font-bold tracking-tight mb-2 flex items-center gap-1 opacity-80">
                           <Warning size={10} /> What could go wrong
                        </h4>
-                       <div className="space-y-2">
-                         {selectedLineInfo.warning && (
-                           <p className="text-[10px] text-vscode-text/80">{selectedLineInfo.warning}</p>
-                         )}
-                         {selectedLineInfo.status === 'warning' && (
-                           <p className="text-[10px] leading-relaxed overflow-hidden font-mono bg-black/20 p-2 rounded text-vscode-secondary/90">
-                             {selectedLineInfo.feedback}
-                           </p>
-                         )}
-                       </div>
+                       <p className="text-[10px] text-amber-500/90 leading-relaxed font-mono">
+                         {selectedLineInfo.warning}
+                       </p>
                     </div>
                   )}
                 </div>
