@@ -920,12 +920,27 @@ export function simulateExecution(line, overrides = {}) {
     const p1 = parsedValues[v1];
     const p2 = parsedValues[v2];
     
+    // We treat invalid inputs as unquoted strings so the simulation doesn't break
+    const val1 = (p1.type === "Invalid") ? p1.value : p1.parsed;
+    const val2 = (p2.type === "Invalid") ? p2.value : p2.parsed;
+
     if (p1.type === "Invalid" || p2.type === "Invalid") {
       status = "warning";
-      feedback = "One or more inputs are invalid. Wrap text in quotes!";
+      feedback = "One or more inputs are missing quotes! Treating as raw text for now.";
+      
+      if (operator === '+') {
+        result = `"${String(val1).replace(/['"]/g, '')}${String(val2).replace(/['"]/g, '')}"`;
+        resultType = "String";
+      } else {
+        result = "NaN";
+        resultType = "Number";
+      }
+      expression = `${p1.value} ${operator} ${p2.value}`;
+      steps.push(`${expression} = ${result} (fallback joining/math)`);
+      if (cleanLine.includes("return")) {
+        steps.push(`return ${result} (final output)`);
+      }
     } else {
-      const val1 = p1.parsed;
-      const val2 = p2.parsed;
       
       if (operator === '+') {
         if (typeof val1 === 'string' || typeof val2 === 'string') {
@@ -965,6 +980,8 @@ export function simulateExecution(line, overrides = {}) {
     steps.push(`return ${result} (final output)`);
   }
 
+  const insight = generateKeyInsight(cleanLine, resultType);
+
   return { 
     steps: steps.slice(0, 5), 
     result: result !== null ? result : "N/A", 
@@ -973,8 +990,34 @@ export function simulateExecution(line, overrides = {}) {
     status, 
     expression,
     detectedVariables,
-    parsedValues
+    parsedValues,
+    insight
   };
+}
+
+/**
+ * Generates a dynamic, short, and impactful learning takeaway based on the code behavior.
+ * @param {string} line - The raw line of code
+ * @param {string} resultType - The computed result type
+ */
+export function generateKeyInsight(line, resultType) {
+  const isString = resultType?.toLowerCase() === 'string';
+  const isNumber = resultType?.toLowerCase() === 'number';
+  
+  if (line.includes("+")) {
+    if (isString) return "The + operator joins values together when text is involved.";
+    if (isNumber) return "The + operator performs pure mathematical addition for numbers.";
+  }
+  if (line.match(/[*/-]/)) {
+    return "Math operators (*, /, -) automatically convert text into numbers for calculation.";
+  }
+  if (line.includes("return")) {
+    return "Return statements pass the final value back for other functions to use.";
+  }
+  if (line.includes("const") || line.includes("let") || line.includes("var")) {
+    return "Variables safely store data in memory so your application can remember it.";
+  }
+  return "JavaScript adapts its execution rules dynamically based on the exact types of your data.";
 }
 
 /**

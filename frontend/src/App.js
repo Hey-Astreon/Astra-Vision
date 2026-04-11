@@ -431,6 +431,20 @@ function App() {
     return items;
   };
   
+  // Phase 9: Fully Reactive Simulation Effect
+  // Automatically re-simulate whenever the code or inputs change
+  useEffect(() => {
+    if (selectedLineInfo?.code) {
+      const analysis = explainLine(selectedLineInfo.code, playgroundState.simulationInputs);
+      if (analysis) {
+        setSelectedLineInfo(prev => ({
+          ...prev,
+          ...analysis
+        }));
+      }
+    }
+  }, [playgroundState.simulationInputs, selectedLineInfo?.code]);
+
   // Select file and fetch content
   const handleSelectFile = useCallback(async (file) => {
     if (file.type === 'dir') return;
@@ -591,38 +605,63 @@ function App() {
       const { position } = e.target;
       if (position) {
         const lineContent = editor.getModel().getLineContent(position.lineNumber);
-        const analysis = explainLine(lineContent, playgroundState.simulationInputs);
-        if (analysis) {
-          setSelectedLineInfo({
+        
+        // Update selected line info
+        setSelectedLineInfo(prev => {
+          const isSameLine = prev?.line === (position?.lineNumber || null);
+          return {
             line: position.lineNumber,
-            ...analysis
-          });
-          
-          // Reset playground state for the new line if it's a different line
-          if (selectedLineInfo?.line !== position.lineNumber) {
-            setPlaygroundState({
-              simulationInputs: {},
-              previousResult: null,
-              errors: {}
-            });
-          }
-
-          // Phase 6: Dynamic Visual Feedback - Line Highlighting
-          decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [
-            {
-              range: { startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: 1 },
-              options: { isWholeLine: true, className: 'line-highlight' }
+            code: lineContent,
+            ...(isSameLine ? prev : { steps: [], result: null, feedback: null }) // Reset results for new line
+          };
+        });
+        
+        // Reset playground inputs if moving to a new line
+        setPlaygroundState(prev => {
+            if (selectedLineInfo?.line !== position.lineNumber) {
+                return {
+                    simulationInputs: {},
+                    previousResult: null,
+                    errors: {}
+                };
             }
-          ]);
-        }
+            return prev;
+        });
+
+        // Highlight selected line
+        decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [
+          {
+            range: { startLineNumber: position.lineNumber, startColumn: 1, endLineNumber: position.lineNumber, endColumn: 1 },
+            options: { isWholeLine: true, className: 'line-highlight' }
+          }
+        ]);
       }
     });
-
-    // Optional: Reset selection when code changes
-    editor.onDidChangeModelContent(() => {
-      setSelectedLineInfo(null);
-    });
   };
+
+  // Phase 9: Fully Reactive Simulation Effect
+  // Automatically re-simulate whenever the code or inputs change
+  useEffect(() => {
+    if (selectedLineInfo?.code) {
+      const analysis = explainLine(selectedLineInfo.code, playgroundState.simulationInputs);
+      if (analysis) {
+        setSelectedLineInfo(prev => ({
+          ...prev,
+          ...analysis
+        }));
+      }
+    }
+  }, [playgroundState.simulationInputs, selectedLineInfo?.code]);
+
+  // Optional: Reset selection when code changes
+  useEffect(() => {
+    if (editorRef.current) {
+        const disposable = editorRef.current.onDidChangeModelContent(() => {
+            setSelectedLineInfo(null);
+        });
+        return () => disposable.dispose();
+    }
+  }, [editorRef.current]);
   
   return (
     <div className="h-screen flex overflow-hidden bg-vscode-bg text-vscode-text font-sans">
@@ -911,31 +950,56 @@ function App() {
                     ))}
                   </div>
 
-                  {/* Result & Feedback Card */}
-                  <div className={`p-3 rounded border transition-all duration-500 ${selectedLineInfo.status === 'warning' ? 'bg-vscode-secondary/5 border-vscode-secondary/20' : 'bg-vscode-primary/5 border-vscode-primary/20'}`}>
-                    <div className="flex items-center justify-between mb-2">
-                       <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-widest ${selectedLineInfo.resultType === 'String' ? 'bg-vscode-secondary/20 text-vscode-secondary' : 'bg-vscode-primary/20 text-vscode-primary'}`}>
-                        {selectedLineInfo.resultType}
-                       </span>
-                       <div className="text-[10px] font-mono text-vscode-muted">
-                        {playgroundState.previousResult && (
-                          <span className="opacity-50 line-through mr-2">{playgroundState.previousResult}</span>
+                  {/* Dedicated Result Section */}
+                  {selectedLineInfo.result !== undefined && (
+                    <div className={`mt-2 mb-4 p-4 rounded-lg border-2 flex flex-col items-center justify-center transition-all duration-500 ${
+                        selectedLineInfo.resultType?.toLowerCase() === 'number' ? 'result-number' : 
+                        selectedLineInfo.resultType?.toLowerCase() === 'string' ? 'result-string' : 
+                        'bg-gray-800 border-gray-600 text-gray-300'
+                    }`}>
+                      <span className="text-[10px] font-bold uppercase mb-1 opacity-70 tracking-widest">
+                        {selectedLineInfo.resultType} Result
+                      </span>
+                      <div className="flex items-center gap-3 mt-1" key={selectedLineInfo.result}>
+                        {playgroundState.previousResult !== null && playgroundState.previousResult !== undefined && playgroundState.previousResult !== selectedLineInfo.result && (
+                          <>
+                            <span className="text-xl font-mono font-bold opacity-40 line-through truncate max-w-[100px]">
+                              {typeof playgroundState.previousResult === 'string' || selectedLineInfo.resultType?.toLowerCase() === 'string' ? `"${playgroundState.previousResult}"` : playgroundState.previousResult}
+                            </span>
+                            <span className="text-vscode-muted text-xl animate-in fade-in zoom-in duration-300">→</span>
+                          </>
                         )}
-                        <span className="text-vscode-text font-bold animate-in fade-in zoom-in duration-300">
-                          {selectedLineInfo.result}
+                        <span className="text-2xl font-mono font-bold animate-in fade-in slide-in-from-right-4 duration-500 truncate max-w-[200px]">
+                           {selectedLineInfo.resultType?.toLowerCase() === 'string' ? `"${selectedLineInfo.result}"` : selectedLineInfo.result}
                         </span>
-                       </div>
+                      </div>
                     </div>
-                    
+                  )}
+
+                  {/* Feedback Card */}
+                  <div className={`p-3 rounded border transition-all duration-500 ${selectedLineInfo.status === 'warning' ? 'bg-vscode-secondary/5 border-vscode-secondary/20 text-vscode-secondary' : 'bg-vscode-primary/5 border-vscode-primary/20 text-vscode-primary'}`}>
                     <div className="flex items-start gap-2">
-                      <div className={`mt-0.5 ${selectedLineInfo.status === 'warning' ? 'text-vscode-secondary' : 'text-vscode-primary'}`}>
+                      <div className="mt-0.5">
                         {selectedLineInfo.status === 'warning' ? <Warning size={14} /> : <CheckCircle size={14} weight="fill" />}
                       </div>
-                      <p className="text-[10px] text-vscode-text leading-relaxed">
+                      <p className="text-[10px] leading-relaxed overflow-hidden">
                         {selectedLineInfo.feedback}
                       </p>
                     </div>
                   </div>
+
+                  {/* Key Insight */}
+                  {selectedLineInfo.insight && (
+                    <div className="mt-3 p-3 rounded bg-yellow-400/10 border border-yellow-400/20 flex items-start gap-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                       <span className="text-sm mt-px" role="img" aria-label="insight">💡</span>
+                       <div>
+                         <h5 className="text-[9px] font-bold text-yellow-500/90 uppercase tracking-widest mb-1">Key Insight</h5>
+                         <p className="text-[10px] text-yellow-100/90 leading-relaxed font-semibold">
+                           {selectedLineInfo.insight}
+                         </p>
+                       </div>
+                    </div>
+                  )}
                 </div>
 
                 {selectedLineInfo.steps && selectedLineInfo.steps.length > 0 && (

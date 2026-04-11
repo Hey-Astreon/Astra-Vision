@@ -198,6 +198,19 @@
   animation: fadeInUp 0.3s ease-out both;
 }
 
+/* Phase 8: Result Section */
+.result-number {
+  background-color: rgba(79, 193, 255, 0.1);
+  color: #4fc1ff;
+  border-color: rgba(79, 193, 255, 0.3);
+}
+
+.result-string {
+  background-color: rgba(206, 145, 120, 0.1);
+  color: #ce9178;
+  border-color: rgba(206, 145, 120, 0.3);
+}
+
 @keyframes fadeInUp {
   from {
     opacity: 0;
