@@ -1,4 +1,4 @@
-import os, sys
+import sys
 sys.path.insert(0, 'backend')
 from services.ast_parser import ASTParser
 
