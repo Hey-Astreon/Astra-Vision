@@ -18,7 +18,20 @@ echo                ONE-CLICK APPLICATION LAUNCHER
 echo ================================================================
 echo.
 
-:: Check for Python
+:: Check for Python and try to locate it in standard directories if not in PATH
+python --version >nul 2>&1
+if %errorlevel% neq 0 (
+    if exist "%LocalAppData%\Programs\Python\Python312\python.exe" (
+        set "PATH=%LocalAppData%\Programs\Python\Python312;%LocalAppData%\Programs\Python\Python312\Scripts;%PATH%"
+    ) else if exist "%LocalAppData%\Programs\Python\Python313\python.exe" (
+        set "PATH=%LocalAppData%\Programs\Python\Python313;%LocalAppData%\Programs\Python\Python313\Scripts;%PATH%"
+    ) else if exist "%LocalAppData%\Programs\Python\Python311\python.exe" (
+        set "PATH=%LocalAppData%\Programs\Python\Python311;%LocalAppData%\Programs\Python\Python311\Scripts;%PATH%"
+    ) else if exist "%LocalAppData%\Programs\Python\Python310\python.exe" (
+        set "PATH=%LocalAppData%\Programs\Python\Python310;%LocalAppData%\Programs\Python\Python310\Scripts;%PATH%"
+    )
+)
+
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo [ERROR] Python is not installed or not in your PATH.

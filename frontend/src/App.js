@@ -31,7 +31,7 @@ import {
   CheckCircle
 } from '@phosphor-icons/react';
 import './App.css';
-import { explainCode, parseCode, analyzeCode, generateDiagram, explainLine } from './utils/analysisEngine';
+import { explainCode, parseCode, analyzeCode, generateDiagram, explainLine, analyzeError } from './utils/analysisEngine';
 
 // Local Mock AI Logic
 
@@ -269,6 +269,8 @@ const Spinner = ({ size = 20 }) => (
   typeof CircleNotch !== "undefined" && <CircleNotch size={size} className="animate-spin text-vscode-primary" />
 );
 
+const API_BASE = "http://localhost:8001";
+
 // Main App component
 function App() {
   // State
@@ -285,6 +287,7 @@ function App() {
   
   const editorRef = useRef(null);
   const decorationsRef = useRef([]);
+  const monacoRef = useRef(null);
   const [expandedFolders, setExpandedFolders] = useState(new Set());
   const [openTabs, setOpenTabs] = useState([]);
   const [activeTab, setActiveTab] = useState(null);
@@ -306,6 +309,11 @@ function App() {
   const [diagramCode, setDiagramCode] = useState('');
   const [errorExplanation, setErrorExplanation] = useState(null);
   const [flowDiagram, setFlowDiagram] = useState(null);
+  const [prReview, setPrReview] = useState(null);
+  const [loadingReview, setLoadingReview] = useState(false);
+  const [severityFilter, setSeverityFilter] = useState('All');
+  const [indexingStatus, setIndexingStatus] = useState('');
+  const [selfHealResults, setSelfHealResults] = useState({});
   
   // Parse GitHub URL
   const parseGitHubUrl = (url) => {
@@ -323,12 +331,55 @@ function App() {
     return null;
   };
   
+  // Index repository files in the backend ChromaDB
+  const indexRepoFiles = async (tree) => {
+    setIndexingStatus('indexing');
+    try {
+      const filesMap = {};
+      
+      const traverse = async (nodes) => {
+        for (const node of nodes) {
+          if (node.type === 'dir' && node.children) {
+            await traverse(node.children);
+          } else if (node.type === 'file') {
+            try {
+              if (node.download_url === null && MOCK_REPO_FILES[node.path]) {
+                filesMap[node.path] = MOCK_REPO_FILES[node.path];
+              } else if (node.download_url) {
+                const response = await axios.get(node.download_url);
+                filesMap[node.path] = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+              }
+            } catch (err) {
+              console.error("Error downloading file for indexing:", node.path, err);
+            }
+          }
+        }
+      };
+
+      await traverse(tree);
+      
+      const indexRes = await axios.post(`${API_BASE}/api/index-repo`, {
+        files: filesMap
+      });
+      
+      if (indexRes.data && indexRes.data.success) {
+        setIndexingStatus('completed');
+      } else {
+        setIndexingStatus('failed');
+      }
+    } catch (error) {
+      console.error("Failed to index repository:", error);
+      setIndexingStatus('failed');
+    }
+  };
+  
   // Load demo repository (fallback mode)
   const loadDemoRepo = () => {
     setIsDemoMode(true);
     setRepoTree(MOCK_REPO_TREE);
     setExpandedFolders(new Set(['src']));
     setRepoError('');
+    indexRepoFiles(MOCK_REPO_TREE);
   };
 
   // Fetch repository structure
@@ -356,6 +407,7 @@ function App() {
     setFlowDiagram(null);
     setDiagramCode('');
     setIsDemoMode(false);
+    setIndexingStatus('');
     
     try {
       const { owner, repo } = parsed;
@@ -371,6 +423,9 @@ function App() {
       // Auto-expand first level folders
       const folders = tree.filter(item => item.type === 'dir').map(item => item.path);
       setExpandedFolders(new Set(folders));
+      
+      // Trigger background indexing
+      indexRepoFiles(tree);
       
     } catch (error) {
       console.error('Error fetching repo:', error);
@@ -513,7 +568,7 @@ function App() {
     });
   };
   
-  // Explain code - Visual Teaching Engine Refinement
+  // Explain code - Integrated with FastAPI Backend
   const handleExplainCode = async () => {
     if (!fileContent || fileContent.trim() === '') {
       setCodeExplanation({ error: 'No code loaded. Please select a file first.' });
@@ -525,19 +580,18 @@ function App() {
     setDiagramCode('');
     
     try {
-      // Simulate slight processing delay for "thinking" feel
-      await new Promise(r => setTimeout(r, 400));
+      const response = await axios.post(`${API_BASE}/api/explain-code`, {
+        code: fileContent,
+        filename: selectedFile?.name
+      });
       
-      // End-to-End Orchestrator Call
-      const result = explainCode(fileContent);
-      console.log("Explain Output:", result);
-
-      if (!result) {
-        throw new Error("Empty result from analysis engine");
+      if (response.data && response.data.success) {
+        const result = response.data.data;
+        setCodeExplanation(result);
+        setDiagramCode(result.diagram || '');
+      } else {
+        throw new Error(response.data?.detail || "Failed to explain code");
       }
-      
-      setCodeExplanation(result);
-      setDiagramCode(result.diagram || '');
     } catch (error) {
       console.error('Error in Teaching Engine:', error);
       setCodeExplanation({ error: 'Something went wrong during analysis.' });
@@ -546,7 +600,7 @@ function App() {
     }
   };
   
-  // Explain error - Orchestrated via Error Intelligence Engine
+  // Explain error - Integrated with FastAPI Backend
   const handleExplainError = async () => {
     if (!errorInput || errorInput.trim() === '') {
       setErrorExplanation({ error: 'Please enter an error message.' });
@@ -557,11 +611,16 @@ function App() {
     setErrorExplanation(null);
     
     try {
-      await new Promise(r => setTimeout(r, 500));
+      const response = await axios.post(`${API_BASE}/api/explain-error`, {
+        error: errorInput,
+        code: fileContent
+      });
       
-      // Integration: Use the context-aware analyzeError engine
-      const result = analyzeError(errorInput, fileContent);
-      setErrorExplanation(result);
+      if (response.data && response.data.success) {
+        setErrorExplanation(response.data.data);
+      } else {
+        throw new Error(response.data?.detail || "Failed to debug error");
+      }
     } catch (error) {
       console.error('Error explaining error:', error);
       setErrorExplanation({ error: 'Something went wrong. Try again.' });
@@ -570,7 +629,7 @@ function App() {
     }
   };
   
-  // Generate flow - Integrated with Analysis Engine Orchestrator
+  // Generate flow - Integrated with FastAPI Backend
   const handleGenerateFlow = async () => {
     if (!fileContent || fileContent.trim() === '') {
       setFlowDiagram({ error: 'No code loaded. Please select a file first.' });
@@ -581,13 +640,16 @@ function App() {
     setFlowDiagram(null);
     
     try {
-      await new Promise(r => setTimeout(r, 500));
+      const response = await axios.post(`${API_BASE}/api/generate-flow`, {
+        code: fileContent,
+        filename: selectedFile?.name
+      });
       
-      const analysis = analyzeCode(parseCode(fileContent));
-      if (!analysis) throw new Error("File too simple for flow analysis.");
-      
-      const diagram = generateDiagram(analysis);
-      setFlowDiagram({ diagram });
+      if (response.data && response.data.success) {
+        setFlowDiagram(response.data.data);
+      } else {
+        throw new Error(response.data?.detail || "Failed to generate diagram");
+      }
     } catch (error) {
       console.error('Error generating flow:', error);
       setFlowDiagram({ error: 'System cannot visualize this specific code yet.' });
@@ -596,9 +658,129 @@ function App() {
     }
   };
 
+  // Run AI Code Review / Audit
+  const handleReviewPR = async () => {
+    if (!fileContent || fileContent.trim() === '') {
+      setPrReview({ error: 'No code loaded. Please select a file first.' });
+      return;
+    }
+    
+    setLoadingReview(true);
+    setPrReview(null);
+    
+    try {
+      const mockDiff = `+++ b/${selectedFile?.name || 'app.js'}\n${fileContent}`;
+      const response = await axios.post(`${API_BASE}/api/review-pr`, {
+        diff: mockDiff
+      });
+      
+      if (response.data && response.data.success) {
+        setPrReview(response.data.data);
+      } else {
+        throw new Error(response.data?.detail || "Failed to review code");
+      }
+    } catch (error) {
+      console.error('Error reviewing code:', error);
+      setPrReview({ error: 'Something went wrong during code review.' });
+    } finally {
+      setLoadingReview(false);
+    }
+  };
+
+  // Run self-healing loop
+  const handleSelfHeal = async (comment, index) => {
+    if (!editorRef.current) return;
+    
+    setSelfHealResults(prev => ({
+      ...prev,
+      [index]: { loading: true, progressStep: 1, error: null }
+    }));
+    
+    // Animate progress steps (cinematic loader)
+    let step = 1;
+    const progressInterval = setInterval(() => {
+      if (step < 3) {
+        step += 1;
+        setSelfHealResults(prev => ({
+          ...prev,
+          [index]: { ...prev[index], progressStep: step }
+        }));
+      }
+    }, 2000);
+    
+    try {
+      const model = editorRef.current.getModel();
+      const startLine = Math.max(1, comment.line - 10);
+      const endLine = Math.min(model.getLineCount(), comment.line + 15);
+      
+      let codeSnippet = "";
+      for (let i = startLine; i <= endLine; i++) {
+        codeSnippet += model.getLineContent(i) + "\n";
+      }
+
+      const language = selectedFile?.name?.endsWith('.py') ? 'python' : 'javascript';
+      
+      const response = await axios.post(`${API_BASE}/api/self-heal`, {
+        code: codeSnippet,
+        audit_comment: comment.text,
+        language: language
+      });
+
+      clearInterval(progressInterval);
+
+      if (response.data && response.data.success) {
+        setSelfHealResults(prev => ({
+          ...prev,
+          [index]: {
+            loading: false,
+            progressStep: 4,
+            ...response.data.data
+          }
+        }));
+      } else {
+        throw new Error(response.data?.detail || "Self-healing failed");
+      }
+    } catch (error) {
+      clearInterval(progressInterval);
+      console.error("Error self healing:", error);
+      setSelfHealResults(prev => ({
+        ...prev,
+        [index]: { loading: false, progressStep: 0, error: error.message || "Failed to heal code" }
+      }));
+    }
+  };
+
+  // Apply fixed code to Monaco Editor
+  const applyHealedFix = (index, commentLine) => {
+    const result = selfHealResults[index];
+    if (!result || !editorRef.current || !monacoRef.current) return;
+    
+    const model = editorRef.current.getModel();
+    const startLine = Math.max(1, commentLine - 10);
+    const endLine = Math.min(model.getLineCount(), commentLine + 15);
+    
+    const range = new monacoRef.current.Range(
+      startLine, 
+      1, 
+      endLine, 
+      model.getLineMaxColumn(endLine)
+    );
+    
+    editorRef.current.executeEdits("self-heal", [{
+      range: range,
+      text: result.fixed_code,
+      forceMoveMarkers: true
+    }]);
+
+    // Clear state
+    setPrReview(null);
+    setSelfHealResults({});
+  };
+
   // Line-by-line interactive controller
-  const handleEditorMount = (editor) => {
+  const handleEditorMount = (editor, monaco) => {
     editorRef.current = editor;
+    monacoRef.current = monaco;
     
     // Requirement Phase 6: Interactive learning click detector
     editor.onMouseDown((e) => {
@@ -693,6 +875,58 @@ function App() {
     }
   }, [playgroundState.simulationInputs, selectedLineInfo?.code, selectedLineInfo?.line]);
 
+  // Monaco Inline Diagnostics: Sync PR review comments to editor model markers
+  useEffect(() => {
+    const monaco = monacoRef.current;
+    const editor = editorRef.current;
+    if (!monaco || !editor) return;
+    
+    const model = editor.getModel();
+    if (!model) return;
+
+    if (!prReview || !prReview.comments || prReview.comments.length === 0) {
+      // Clear markers when review is cleared or empty
+      monaco.editor.setModelMarkers(model, 'astra-vision-audit', []);
+      return;
+    }
+
+    const severityMap = {
+      Critical: monaco.MarkerSeverity.Error,
+      Warning: monaco.MarkerSeverity.Warning,
+      Optimization: monaco.MarkerSeverity.Info,
+      Style: monaco.MarkerSeverity.Hint,
+    };
+
+    const markers = prReview.comments.map((comment) => {
+      const lineNumber = Math.max(1, Math.min(comment.line || 1, model.getLineCount()));
+      const lineContent = model.getLineContent(lineNumber);
+      const startCol = lineContent.search(/\S/) + 1;
+      const endCol = lineContent.length + 1;
+
+      return {
+        severity: severityMap[comment.severity] ?? monaco.MarkerSeverity.Warning,
+        message: `[Astra Vision] ${comment.text}`,
+        startLineNumber: lineNumber,
+        startColumn: startCol,
+        endLineNumber: lineNumber,
+        endColumn: endCol,
+        source: 'Astra Vision Audit',
+      };
+    });
+
+    monaco.editor.setModelMarkers(model, 'astra-vision-audit', markers);
+  }, [prReview]);
+
+  // Clear markers when a new file is loaded
+  useEffect(() => {
+    const monaco = monacoRef.current;
+    const editor = editorRef.current;
+    if (!monaco || !editor) return;
+    const model = editor.getModel();
+    if (!model) return;
+    monaco.editor.setModelMarkers(model, 'astra-vision-audit', []);
+  }, [fileContent]);
+
   // Optional: Reset selection when code changes
   useEffect(() => {
     if (editorRef.current) {
@@ -765,6 +999,34 @@ function App() {
             <div data-testid="demo-mode-indicator" className="mt-2 text-xs text-vscode-secondary bg-vscode-secondary/10 border border-vscode-secondary/30 rounded-sm p-2">
               {typeof Lightning !== "undefined" && <Lightning size={14} className="inline mr-1" />}
               Demo Mode Active
+            </div>
+          )}
+
+          {/* Indexing Status Banner */}
+          {indexingStatus && (
+            <div className={`mt-2 text-xs rounded-sm p-2 flex items-center gap-2 border ${
+              indexingStatus === 'indexing' 
+                ? 'text-vscode-primary bg-vscode-primary/10 border-vscode-primary/30' 
+                : indexingStatus === 'completed'
+                ? 'text-green-400 bg-green-500/10 border-green-500/20'
+                : 'text-vscode-danger bg-vscode-danger/10 border-vscode-danger/30'
+            }`}>
+              {indexingStatus === 'indexing' ? (
+                <>
+                  <Spinner size={12} />
+                  <span>Indexing codebase...</span>
+                </>
+              ) : indexingStatus === 'completed' ? (
+                <>
+                  <CheckCircle size={14} weight="fill" className="text-green-400" />
+                  <span>Codebase indexed</span>
+                </>
+              ) : (
+                <>
+                  <Warning size={14} className="text-vscode-danger" />
+                  <span>Semantic indexing failed</span>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1112,6 +1374,146 @@ function App() {
                <p className="text-[11px] text-vscode-muted italic">Click any line in the editor<br/>to explore it deeply.</p>
             </div>
           )}
+
+          {/* AI Code Review & Audit Section */}
+          <div className="panel-section p-4 border-b border-vscode-border">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-mono text-vscode-muted uppercase tracking-widest flex items-center gap-2">
+                <Bug size={14} className="text-vscode-warning" />
+                AI Code Review (PR Audit)
+              </h3>
+              <button
+                data-testid="review-pr-btn"
+                onClick={handleReviewPR}
+                disabled={!fileContent || loadingReview}
+                className="bg-vscode-warning text-black hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-sm px-3 py-1 text-xs font-semibold flex items-center gap-1"
+              >
+                {loadingReview ? <CircleNotch size={12} className="animate-spin" /> : <Lightning size={12} />}
+                Run Audit
+              </button>
+            </div>
+
+            {prReview && !prReview.error && (
+              <div className="space-y-3">
+                {/* Severity Filter Dropdown */}
+                <div className="flex items-center justify-between gap-2 bg-vscode-input p-2 rounded-sm border border-vscode-border">
+                  <label className="text-[10px] text-vscode-muted font-mono uppercase">Filter Severity:</label>
+                  <select
+                    value={severityFilter}
+                    onChange={(e) => setSeverityFilter(e.target.value)}
+                    className="bg-vscode-bg border border-vscode-border text-xs px-2 py-0.5 rounded focus:outline-none focus:border-vscode-primary font-mono text-white"
+                  >
+                    <option value="All">All</option>
+                    <option value="Critical">Critical</option>
+                    <option value="Warning">Warning</option>
+                    <option value="Optimization">Optimization</option>
+                    <option value="Style">Style</option>
+                  </select>
+                </div>
+
+                {/* Comments List */}
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {prReview.comments && prReview.comments
+                    .filter(c => severityFilter === 'All' || c.severity === severityFilter)
+                    .map((comment, index) => (
+                      <div key={index} className="p-3 bg-vscode-input/50 rounded border border-vscode-border hover:border-vscode-primary/50 transition-colors bg-vscode-sidebar">
+                        <div className="flex items-center justify-between mb-2">
+                          <button
+                            onClick={() => {
+                              if (editorRef.current) {
+                                editorRef.current.revealLineInCenter(comment.line);
+                                editorRef.current.setPosition({ lineNumber: comment.line, column: 1 });
+                                const model = editorRef.current.getModel();
+                                const lineContent = model.getLineContent(comment.line);
+                                setSelectedLineInfo({
+                                  line: comment.line,
+                                  code: lineContent,
+                                  steps: [],
+                                  result: null,
+                                  feedback: null
+                                });
+                              }
+                            }}
+                            className="text-vscode-primary text-[10px] font-mono hover:underline flex items-center gap-1 bg-transparent border-0 cursor-pointer"
+                          >
+                            <Play size={10} /> Line {comment.line}
+                          </button>
+                          <span className={`px-2 py-0.5 rounded-[2px] text-[8px] font-mono font-bold uppercase tracking-wider ${
+                            comment.severity === 'Critical' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                            comment.severity === 'Warning' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+                            comment.severity === 'Optimization' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                            'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+                          }`}>
+                            {comment.severity}
+                          </span>
+                        </div>
+                        <p className="text-xs text-vscode-text leading-relaxed font-mono">{comment.text}</p>
+                        
+                        {/* Self healing interface */}
+                        <div className="mt-3 pt-2 border-t border-vscode-border/30">
+                          {!selfHealResults[index] ? (
+                            <button
+                              onClick={() => handleSelfHeal(comment, index)}
+                              className="text-[10px] font-mono font-bold flex items-center gap-1 text-vscode-warning hover:underline bg-transparent border-0 cursor-pointer"
+                            >
+                              <Lightning size={10} weight="fill" /> Run & Heal
+                            </button>
+                          ) : selfHealResults[index].loading ? (
+                            <div className="space-y-1 bg-vscode-bg/30 p-2 rounded-[2px] font-mono text-[9px] border border-vscode-border/20 text-vscode-muted">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold uppercase tracking-wider text-vscode-primary">Self-Healing Execution</span>
+                                <Spinner size={8} />
+                              </div>
+                              <div className="flex items-center gap-1 mt-1">
+                                <span className={selfHealResults[index].progressStep >= 1 ? "text-vscode-primary font-bold" : "opacity-40"}>🧪 Gen Test</span>
+                                <span className="opacity-40">→</span>
+                                <span className={selfHealResults[index].progressStep >= 2 ? "text-vscode-danger font-bold" : "opacity-40"}>❌ Run Fail</span>
+                                <span className="opacity-40">→</span>
+                                <span className={selfHealResults[index].progressStep >= 3 ? "text-vscode-warning font-bold" : "opacity-40"}>🔧 Heal</span>
+                                <span className="opacity-40">→</span>
+                                <span className={selfHealResults[index].progressStep >= 4 ? "text-green-400 font-bold" : "opacity-40"}>✅ Run Pass</span>
+                              </div>
+                            </div>
+                          ) : selfHealResults[index].error ? (
+                            <div className="text-[9px] text-vscode-danger font-mono bg-red-500/10 p-2 rounded-[2px] border border-red-500/20">
+                              Failed: {selfHealResults[index].error}
+                            </div>
+                          ) : (
+                            <div className="space-y-2 font-mono text-[10px] bg-vscode-sidebar/80 p-2.5 rounded border border-vscode-border">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold uppercase tracking-wider text-green-400">Heal Success</span>
+                                <span className="px-1.5 py-0.5 rounded-[2px] bg-green-500/20 text-green-400 font-bold text-[8px] border border-green-500/30">TEST PASSED</span>
+                              </div>
+                              <div className="text-[9px] text-vscode-muted leading-relaxed max-h-24 overflow-y-auto bg-vscode-bg/50 p-1.5 rounded border border-vscode-border/20">
+                                <strong>Proposed Fix:</strong>
+                                <pre className="text-green-400 mt-0.5 bg-green-500/5 p-1 rounded border border-green-500/10 overflow-x-auto whitespace-pre font-mono">{selfHealResults[index].fixed_code}</pre>
+                              </div>
+                              <button
+                                onClick={() => applyHealedFix(index, comment.line)}
+                                className="w-full bg-green-500 text-black hover:bg-green-400 font-bold py-1 px-2 rounded-sm text-[9px] uppercase tracking-wider flex items-center justify-center gap-1 border-0 cursor-pointer"
+                              >
+                                <CheckCircle size={10} weight="fill" /> Apply Fix to Editor
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  {prReview.comments && prReview.comments.filter(c => severityFilter === 'All' || c.severity === severityFilter).length === 0 && (
+                    <p className="text-[10px] text-vscode-muted italic text-center py-4">No comments found matching filter</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {prReview?.error && (
+              <div className="text-vscode-danger text-sm mt-2">{prReview.error}</div>
+            )}
+
+            {!prReview && !loadingReview && (
+              <p className="text-vscode-muted text-sm">Click "Run Audit" to analyze codebase quality & security issues</p>
+            )}
+          </div>
 
           {/* Code Explanation Section */}
           <div className="panel-section p-4 border-b border-vscode-border">

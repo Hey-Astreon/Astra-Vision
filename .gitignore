@@ -3,3 +3,6 @@ build/
 .env
 .DS_Store
 *.log
+
+backend/db/
+__pycache__/

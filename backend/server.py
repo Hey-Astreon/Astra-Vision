@@ -4,10 +4,16 @@ from pydantic import BaseModel
 from typing import Optional
 import os
 from dotenv import load_dotenv
+from services.hydra_router import HydraRouter
+from services.self_heal_engine import SelfHealEngine
 
 load_dotenv()
 
 app = FastAPI(title="Astra Vision API", version="1.0.0")
+
+# Initialize Hydra Router & Self Healing Engine
+router = HydraRouter()
+self_heal_engine = SelfHealEngine()
 
 # CORS middleware
 app.add_middleware(
@@ -36,10 +42,58 @@ class GenerateFlowRequest(BaseModel):
     filename: Optional[str] = None
 
 
+class ReviewPRRequest(BaseModel):
+    diff: str
+
+
+class IndexRepoRequest(BaseModel):
+    files: dict
+
+
+class SelfHealRequest(BaseModel):
+    code: str
+    audit_comment: str
+    language: str
+
+
 # Health check
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "service": "Astra Vision API"}
+
+
+# Index repository endpoint
+@app.post("/api/index-repo")
+async def index_repo(request: IndexRepoRequest):
+    if not request.files:
+        raise HTTPException(status_code=400, detail="Files dictionary cannot be empty")
+    
+    try:
+        data = router.indexer.index_repository(request.files)
+        return {
+            "success": True,
+            "data": data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Self-healing execution endpoint
+@app.post("/api/self-heal")
+async def self_heal(request: SelfHealRequest):
+    if not request.code.strip():
+        raise HTTPException(status_code=400, detail="Code snippet cannot be empty")
+    if not request.audit_comment.strip():
+        raise HTTPException(status_code=400, detail="Audit comment cannot be empty")
+    
+    try:
+        data = self_heal_engine.heal(request.code, request.audit_comment, request.language)
+        return {
+            "success": True,
+            "data": data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Explain code endpoint
@@ -48,15 +102,14 @@ async def explain_code(request: ExplainCodeRequest):
     if not request.code.strip():
         raise HTTPException(status_code=400, detail="Code cannot be empty")
     
-    # Mock structured response with success wrapper
-    return {
-        "success": True,
-        "data": {
-            "overview": "This code defines functions and handles logic step by step.",
-            "key_parts": "Includes functions, variables, and control flow such as loops and conditions.",
-            "summary": "Overall, the code processes input and produces structured output."
+    try:
+        data = router.explain_code(request.code, request.filename)
+        return {
+            "success": True,
+            "data": data
         }
-    }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Explain error endpoint
@@ -65,15 +118,14 @@ async def explain_error(request: ExplainErrorRequest):
     if not request.error.strip():
         raise HTTPException(status_code=400, detail="Error message cannot be empty")
     
-    # Mock structured response with success wrapper
-    return {
-        "success": True,
-        "data": {
-            "meaning": "This error indicates something went wrong in the code execution.",
-            "cause": "Likely due to syntax issues or undefined variables.",
-            "fix": "Check your syntax and ensure all variables are properly defined before use."
+    try:
+        data = router.explain_error(request.error, request.code)
+        return {
+            "success": True,
+            "data": data
         }
-    }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Generate flow diagram endpoint
@@ -82,13 +134,30 @@ async def generate_flow(request: GenerateFlowRequest):
     if not request.code.strip():
         raise HTTPException(status_code=400, detail="Code cannot be empty")
     
-    # Mock Mermaid diagram with success wrapper
-    return {
-        "success": True,
-        "data": {
-            "diagram": "graph TD; A[Start] --> B[Process Code]; B --> C[End];"
+    try:
+        data = router.generate_flow(request.code)
+        return {
+            "success": True,
+            "data": data
         }
-    }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# PR review endpoint
+@app.post("/api/review-pr")
+async def review_pr(request: ReviewPRRequest):
+    if not request.diff.strip():
+        raise HTTPException(status_code=400, detail="Diff cannot be empty")
+    
+    try:
+        data = router.review_pr(request.diff)
+        return {
+            "success": True,
+            "data": data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
