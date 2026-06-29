@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0, 'backend')
-from services.ast_parser import ASTParser
+from backend.services.ast_parser import ASTParser
 
 parser = ASTParser()
 

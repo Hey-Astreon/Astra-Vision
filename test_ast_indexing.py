@@ -1,6 +1,6 @@
 import os, sys
 sys.path.insert(0, 'backend')
-from services.code_indexer import CodeIndexer
+from backend.services.code_indexer import CodeIndexer
 
 indexer = CodeIndexer()
 
@@ -35,7 +35,7 @@ for key in ["ids", "metadatas", "documents"]:
 
 # Test context retrieval for starting app
 print("\n=== Resolving context for startApp ===")
-from services.hydra_router import HydraRouter
+from backend.services.hydra_router import HydraRouter
 router = HydraRouter()
 context = router.explain_code('function startApp() {\n    helper("Alice");\n}', 'src/app.js')
 print("Resolved explanation response keys:", context.keys())
