@@ -42,9 +42,33 @@ class HydraRouter:
 
     def explain_code(self, code: str, filename: str = None) -> dict:
         """
-        Uses Cerebras (gpt-oss-120b) for fast code explanation/sandbox simulation.
-        Falls back to Gemini if Cerebras key is missing or fails.
+        Uses Cerebras (gpt-oss-120b) or Gemini to explain code, resolving cross-file AST dependencies.
         """
+        # Resolve dependencies using the AST Parser
+        dependency_context = ""
+        resolved_dependencies = []
+        try:
+            calls = self.indexer.ast_parser.extract_calls(code)
+            found_defs = []
+            
+            for call_name in calls:
+                # Query ChromaDB collection for a function with this name
+                db_results = self.indexer.collection.get(
+                    where={"name": call_name}
+                )
+                if db_results and db_results["documents"]:
+                    doc = db_results["documents"][0]
+                    meta = db_results["metadatas"][0]
+                    found_defs.append(
+                        f"Function '{call_name}' is defined in {meta['filename']} (lines {meta['start_line']}-{meta['end_line']}):\n```\n{doc}\n```"
+                    )
+                    resolved_dependencies.append(call_name)
+            
+            if found_defs:
+                dependency_context = "\n=== RESOLVED AST DEPENDENCY CONTEXT ===\n" + "\n\n".join(found_defs) + "\n=======================================\n"
+        except Exception as e:
+            print(f"Error resolving AST dependency context: {e}")
+
         prompt = f"""
         Analyze this code:
         Filename: {filename or 'Unknown'}
@@ -52,10 +76,13 @@ class HydraRouter:
         ```
         {code}
         ```
+        {dependency_context}
+
         Provide a JSON response with the following keys:
         - "overview": a short sentence describing what the code does.
-        - "key_parts": a brief description of functions/variables/logic used.
+        - "key_parts": a brief description of functions/variables/logic used (mentioning resolved dependencies if applicable).
         - "summary": a one-sentence summary of the execution outcome.
+        - "dependencies": a list of string names of resolved dependency functions.
         Ensure you only return valid JSON. Do not include markdown wraps in your text keys.
         """
 
@@ -69,7 +96,10 @@ class HydraRouter:
                     temperature=0.2,
                 )
                 import json
-                return json.loads(response.choices[0].message.content)
+                res_data = json.loads(response.choices[0].message.content)
+                if "dependencies" not in res_data:
+                    res_data["dependencies"] = resolved_dependencies
+                return res_data
             except Exception as e:
                 print(f"Cerebras explain_code failed: {e}. Falling back to Gemini...")
 
@@ -82,7 +112,10 @@ class HydraRouter:
                     generation_config={"response_mime_type": "application/json"}
                 )
                 import json
-                return json.loads(response.text)
+                res_data = json.loads(response.text)
+                if "dependencies" not in res_data:
+                    res_data["dependencies"] = resolved_dependencies
+                return res_data
             except Exception as e:
                 print(f"Gemini explain_code failed: {e}")
 
@@ -90,7 +123,8 @@ class HydraRouter:
         return {
             "overview": "This code defines functions and handles logic step by step.",
             "key_parts": "Includes functions, variables, and control flow such as loops and conditions.",
-            "summary": "Overall, the code processes input and produces structured output."
+            "summary": "Overall, the code processes input and produces structured output.",
+            "dependencies": resolved_dependencies
         }
 
     def explain_error(self, error: str, code: str = None) -> dict:

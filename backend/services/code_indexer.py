@@ -4,6 +4,7 @@ from openai import OpenAI
 import chromadb
 from chromadb.config import Settings
 from dotenv import load_dotenv
+from services.ast_parser import ASTParser
 
 load_dotenv()
 
@@ -27,6 +28,9 @@ class CodeIndexer:
             )
         else:
             self.nvidia_client = None
+            
+        # Initialize AST Parser
+        self.ast_parser = ASTParser()
 
     def get_embedding(self, text: str, is_query: bool = False) -> list:
         """
@@ -47,54 +51,32 @@ class CodeIndexer:
 
     def chunk_file(self, filename: str, content: str) -> list:
         """
-        Splits source code into logical chunks (by functions or 30-line segments).
+        Splits source code into logical chunks using AST parser or line-based fallbacks.
         """
+        # Extract imports from file
+        file_imports = self.ast_parser.extract_imports(filename, content)
+        imports_str = ",".join([imp["imported_from"] for imp in file_imports])
+
+        # Extract function/class definitions
+        ast_chunks = self.ast_parser.extract_functions(filename, content)
+        
         chunks = []
-        lines = content.splitlines()
-        
-        # Simple chunking strategy: extract functions if JS/Python, or split every 20-30 lines
-        # First, search for function boundaries using standard declaration patterns
-        func_regex = r"(function\s+\w+|const\s+\w+\s*=\s*\(.*?\)\s*=>|def\s+\w+)"
-        matches = list(re.finditer(func_regex, content))
-        
-        if matches:
-            for idx, match in enumerate(matches):
-                start_char = match.start()
-                end_char = matches[idx+1].start() if idx + 1 < len(matches) else len(content)
-                chunk_text = content[start_char:end_char].strip()
-                
-                # Calculate line numbers
-                start_line = content[:start_char].count('\n') + 1
-                end_line = start_line + chunk_text.count('\n')
-                
-                chunks.append({
-                    "text": chunk_text,
-                    "metadata": {
-                        "filename": filename,
-                        "start_line": start_line,
-                        "end_line": end_line,
-                        "type": "function"
-                    }
-                })
-        else:
-            # Fallback to line-based chunking (30 lines per chunk, 5 line overlap)
-            chunk_size = 30
-            overlap = 5
-            for i in range(0, len(lines), chunk_size - overlap):
-                chunk_lines = lines[i:i + chunk_size]
-                if not chunk_lines:
-                    break
-                chunk_text = "\n".join(chunk_lines)
-                chunks.append({
-                    "text": chunk_text,
-                    "metadata": {
-                        "filename": filename,
-                        "start_line": i + 1,
-                        "end_line": min(i + chunk_size, len(lines)),
-                        "type": "generic_chunk"
-                    }
-                })
-        
+        for chunk in ast_chunks:
+            # Build clean metadata matching requirements
+            metadata = {
+                "filename": filename,
+                "start_line": chunk["start_line"],
+                "end_line": chunk["end_line"],
+                "type": chunk["type"], # 'function' | 'class' | 'generic_chunk'
+                "name": chunk["name"] or "",
+                "calls": ",".join(chunk.get("calls", [])),
+                "imports": imports_str
+            }
+            chunks.append({
+                "text": chunk["text"],
+                "metadata": metadata
+            })
+            
         return chunks
 
     def index_repository(self, files: dict) -> dict:

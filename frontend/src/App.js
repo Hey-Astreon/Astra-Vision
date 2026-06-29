@@ -1556,6 +1556,21 @@ function App() {
                 </div>
                 </div>
 
+                {codeExplanation.dependencies && codeExplanation.dependencies.length > 0 && (
+                  <div className="bg-vscode-bg/50 p-2.5 rounded border border-vscode-border">
+                    <h5 className="text-[10px] text-vscode-muted font-mono uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <Graph size={12} className="text-vscode-warning" /> AST Dependencies Resolved:
+                    </h5>
+                    <div className="flex flex-wrap gap-1.5">
+                      {codeExplanation.dependencies.map((dep, i) => (
+                        <span key={i} className="px-2 py-0.5 rounded-[2px] bg-vscode-input text-vscode-warning font-mono text-[9px] border border-vscode-border/50">
+                          {dep}()
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {(codeExplanation.flow || codeExplanation.breakdown) && (codeExplanation.flow || codeExplanation.breakdown).length > 0 && (
                   <div>
                     <h4 className="text-vscode-secondary font-medium mb-1 flex items-center gap-1">
