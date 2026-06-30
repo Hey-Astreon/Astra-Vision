@@ -21,7 +21,8 @@ echo ""
 echo "[1/4] Enabling Cloud Run and Build APIs (this may take a minute)..."
 gcloud services enable run.googleapis.com \
                        cloudbuild.googleapis.com \
-                       containerregistry.googleapis.com
+                       containerregistry.googleapis.com \
+                       artifactregistry.googleapis.com
 
 # 2. Handle Env keys
 echo ""
