@@ -7,8 +7,9 @@ Extracts structured metadata from JS and Python source files:
   - Function call sites (intra-function dependency edges)
 """
 
+import os
 import re
-from typing import Optional
+from typing import Optional, Set
 
 try:
     import tree_sitter_javascript as tsjava
@@ -50,6 +51,71 @@ class ASTParser:
     # Public API
     # ──────────────────────────────────────────────────────────────────────────
 
+    def resolve_import_path(
+        self,
+        source_file: str,
+        imported_from: str,
+        indexed_files: Set[str] = None
+    ) -> str:
+        """
+        Resolves a relative or local import path to its absolute workspace key.
+
+        Examples:
+          source_file='src/admin/dashboard.js', imported_from='./utils'
+            → tries 'src/admin/utils.js', 'src/admin/utils/index.js' etc.
+          source_file='src/app.py', imported_from='.database'
+            → tries 'src/database.py', 'src/database/__init__.py' etc.
+
+        Returns the matched workspace key from indexed_files, or the
+        best-effort normalized path if no match is found.
+        """
+        if not source_file or not imported_from:
+            return imported_from or ""
+
+        dir_name = os.path.dirname(source_file).replace("\\", "/")
+
+        # Relative imports (./x, ../x, .x for Python packages)
+        if imported_from.startswith("."):
+            # Python's relative import uses leading dots: .module or ..module
+            # Normalize so leading dots become a proper relative path segment
+            clean = imported_from.lstrip(".").replace(".", "/")
+            up_levels = len(imported_from) - len(imported_from.lstrip(".")) - 1
+            base_dir = dir_name
+            for _ in range(up_levels):
+                base_dir = os.path.dirname(base_dir).replace("\\", "/")
+            joined = f"{base_dir}/{clean}" if clean else base_dir
+            normalized = os.path.normpath(joined).replace("\\", "/")
+        else:
+            # Absolute-looking path — try directory-relative first, then workspace root
+            joined = f"{dir_name}/{imported_from.replace('.', '/')}"
+            normalized = os.path.normpath(joined).replace("\\", "/")
+
+        if indexed_files:
+            # 1. Direct exact match (import had extension already)
+            if normalized in indexed_files:
+                return normalized
+
+            # 2. Try common code extensions
+            for ext in (".js", ".jsx", ".ts", ".tsx", ".mjs", ".py"):
+                candidate = f"{normalized}{ext}"
+                if candidate in indexed_files:
+                    return candidate
+
+            # 3. Try directory index files
+            for idx in ("/index.js", "/index.ts", "/__init__.py"):
+                candidate = f"{normalized}{idx}"
+                if candidate in indexed_files:
+                    return candidate
+
+            # 4. Last-resort: workspace root relative (for non-relative absolute imports)
+            root_norm = imported_from.replace(".", "/")
+            for ext in (".js", ".py", ".ts"):
+                candidate = f"{root_norm}{ext}"
+                if candidate in indexed_files:
+                    return candidate
+
+        return normalized
+
     def extract_functions(self, filename: str, content: str) -> list:
         """
         Returns a list of function/class chunks with exact AST line boundaries.
@@ -63,18 +129,31 @@ class ASTParser:
         
         return self._regex_fallback_chunks(filename, content)
 
-    def extract_imports(self, filename: str, content: str) -> list:
+    def extract_imports(
+        self,
+        filename: str,
+        content: str,
+        indexed_files: Set[str] = None
+    ) -> list:
         """
-        Returns a list of imported module names/paths from the file.
-        Used to build the cross-file dependency graph.
-        Each item: { source_file, imported_from, import_name }
+        Returns a list of imports from the file, each with resolved_path.
+        Each item:
+          { source_file, imported_from, aliases: [str], resolved_path }
         """
         language = self._detect_language(filename)
         if TREE_SITTER_AVAILABLE and language == "javascript":
-            return self._js_extract_imports(filename, content)
-        if TREE_SITTER_AVAILABLE and language == "python":
-            return self._py_extract_imports(filename, content)
-        return self._regex_extract_imports(filename, content)
+            raw = self._js_extract_imports(filename, content)
+        elif TREE_SITTER_AVAILABLE and language == "python":
+            raw = self._py_extract_imports(filename, content)
+        else:
+            raw = self._regex_extract_imports(filename, content)
+
+        # Resolve every import path and attach resolved_path
+        for item in raw:
+            item["resolved_path"] = self.resolve_import_path(
+                filename, item["imported_from"], indexed_files
+            )
+        return raw
 
     def extract_calls(self, content: str) -> list:
         """
@@ -180,23 +259,45 @@ class ASTParser:
         tree = parser.parse(source_bytes)
 
         imports = []
-        IMPORT_TYPES = {
-            "import_statement", "import_declaration",
-            "call_expression"  # require() calls
-        }
+
+        def _collect_aliases(node) -> list:
+            """Walk import clause to find named specifiers like { helper, validate }."""
+            names = []
+            if node.type in ("import_clause", "named_imports", "namespace_import"):
+                for child in node.children:
+                    names.extend(_collect_aliases(child))
+            elif node.type == "import_specifier":
+                # e.g. 'helper' or 'helper as h'
+                name_node = node.child_by_field_name("name")
+                if name_node:
+                    names.append(self._get_node_text(name_node, source_bytes))
+                else:
+                    # fallback: take first identifier
+                    for child in node.children:
+                        if child.type == "identifier":
+                            names.append(self._get_node_text(child, source_bytes))
+                            break
+            elif node.type == "identifier":
+                names.append(self._get_node_text(node, source_bytes))
+            return names
 
         def walk(node):
             if node.type in ("import_statement", "import_declaration"):
-                # Find the source (the string literal)
+                source = None
+                aliases = []
                 for child in node.children:
                     if child.type == "string":
                         source = self._get_node_text(child, source_bytes).strip("'\"` ")
-                        imports.append({
-                            "source_file": filename,
-                            "imported_from": source
-                        })
+                    else:
+                        aliases.extend(_collect_aliases(child))
+                if source:
+                    imports.append({
+                        "source_file": filename,
+                        "imported_from": source,
+                        "aliases": aliases,
+                    })
 
-            # Detect: const x = require('./utils')
+            # Detect: const { x } = require('./utils')
             elif node.type == "call_expression":
                 func_child = node.child_by_field_name("function")
                 if func_child and self._get_node_text(func_child, source_bytes) == "require":
@@ -207,7 +308,8 @@ class ASTParser:
                                 source = self._get_node_text(child, source_bytes).strip("'\"` ")
                                 imports.append({
                                     "source_file": filename,
-                                    "imported_from": source
+                                    "imported_from": source,
+                                    "aliases": [],  # require() aliases resolved separately
                                 })
 
             for child in node.children:
@@ -227,16 +329,32 @@ class ASTParser:
             if node.type == "import_from_statement":
                 module_node = node.child_by_field_name("module_name")
                 if module_node:
+                    module_name = self._get_node_text(module_node, source_bytes)
+                    # Collect explicitly imported names: from X import a, b, c
+                    aliases = []
+                    for child in node.children:
+                        if child.type in ("import_prefix", "import_from_as_names",
+                                          "aliased_import", "dotted_name",
+                                          "import_statement"):
+                            continue
+                        if child.type == "identifier":
+                            aliases.append(self._get_node_text(child, source_bytes))
+                        elif child.type in ("import_from_as_name", "import_from_as_names"):
+                            for gc in child.children:
+                                if gc.type == "dotted_name" or gc.type == "identifier":
+                                    aliases.append(self._get_node_text(gc, source_bytes))
                     imports.append({
                         "source_file": filename,
-                        "imported_from": self._get_node_text(module_node, source_bytes)
+                        "imported_from": module_name,
+                        "aliases": aliases,
                     })
             elif node.type == "import_statement":
                 for child in node.children:
                     if child.type == "dotted_name":
                         imports.append({
                             "source_file": filename,
-                            "imported_from": self._get_node_text(child, source_bytes)
+                            "imported_from": self._get_node_text(child, source_bytes),
+                            "aliases": [],
                         })
 
             for child in node.children:

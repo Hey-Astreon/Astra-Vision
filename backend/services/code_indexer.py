@@ -49,28 +49,41 @@ class CodeIndexer:
         )
         return response.data[0].embedding
 
-    def chunk_file(self, filename: str, content: str) -> list:
+    def chunk_file(self, filename: str, content: str, indexed_files: set = None) -> list:
         """
         Splits source code into logical chunks using AST parser or line-based fallbacks.
+        Stores a resolved import_map in metadata for namespace-aware dependency queries.
         """
-        # Extract imports from file
-        file_imports = self.ast_parser.extract_imports(filename, content)
-        imports_str = ",".join([imp["imported_from"] for imp in file_imports])
+        # Extract imports with resolved paths
+        file_imports = self.ast_parser.extract_imports(filename, content, indexed_files)
+        
+        # Build import_map: "alias->resolved_path" entries for all named imports
+        # e.g. "helper->src/utils.js,validate->src/validators.js"
+        import_map_parts = []
+        for imp in file_imports:
+            resolved = imp.get("resolved_path", imp["imported_from"])
+            aliases = imp.get("aliases", [])
+            if aliases:
+                for alias in aliases:
+                    import_map_parts.append(f"{alias}->{resolved}")
+            else:
+                # Namespace import: entire module aliased
+                import_map_parts.append(f"{imp['imported_from']}->{resolved}")
+        import_map_str = ",".join(import_map_parts)
 
         # Extract function/class definitions
         ast_chunks = self.ast_parser.extract_functions(filename, content)
         
         chunks = []
         for chunk in ast_chunks:
-            # Build clean metadata matching requirements
             metadata = {
                 "filename": filename,
                 "start_line": chunk["start_line"],
                 "end_line": chunk["end_line"],
-                "type": chunk["type"], # 'function' | 'class' | 'generic_chunk'
+                "type": chunk["type"],
                 "name": chunk["name"] or "",
                 "calls": ",".join(chunk.get("calls", [])),
-                "imports": imports_str
+                "import_map": import_map_str,
             }
             chunks.append({
                 "text": chunk["text"],
@@ -91,10 +104,11 @@ class CodeIndexer:
         )
         
         all_chunks = []
+        indexed_file_keys = set(files.keys())
         for filepath, content in files.items():
             if not content.strip():
                 continue
-            all_chunks.extend(self.chunk_file(filepath, content))
+            all_chunks.extend(self.chunk_file(filepath, content, indexed_file_keys))
             
         if not all_chunks:
             return {"success": True, "indexed_chunks": 0}

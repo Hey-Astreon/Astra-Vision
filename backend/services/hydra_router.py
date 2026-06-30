@@ -43,29 +43,67 @@ class HydraRouter:
     def explain_code(self, code: str, filename: str = None) -> dict:
         """
         Uses Cerebras (gpt-oss-120b) or Gemini to explain code, resolving cross-file AST dependencies.
+        Uses namespace-isolated queries: call sites are matched against import_map to restrict
+        ChromaDB lookups to the specific resolved file, eliminating name collisions.
         """
-        # Resolve dependencies using the AST Parser
+        # ── Step 1: Build import_map for the active file ──────────────────────
+        # The import_map is stored in each chunk's metadata as:
+        #   "helper->src/utils.js,validate->src/validators.js"
+        # We parse this to build: { "helper": "src/utils.js", ... }
+        import_map = {}
+        try:
+            if filename and self.indexer.collection.count() > 0:
+                file_chunks = self.indexer.collection.get(
+                    where={"filename": filename}
+                )
+                if file_chunks and file_chunks["metadatas"]:
+                    raw_map = file_chunks["metadatas"][0].get("import_map", "")
+                    for entry in raw_map.split(","):
+                        if "->" in entry:
+                            alias, resolved = entry.split("->", 1)
+                            import_map[alias.strip()] = resolved.strip()
+        except Exception as e:
+            print(f"Warning: Could not load import_map for {filename}: {e}")
+
+        # ── Step 2: Resolve dependency context using namespace isolation ───────
         dependency_context = ""
         resolved_dependencies = []
         try:
             calls = self.indexer.ast_parser.extract_calls(code)
             found_defs = []
-            
+
             for call_name in calls:
-                # Query ChromaDB collection for a function with this name
-                db_results = self.indexer.collection.get(
-                    where={"name": call_name}
-                )
+                target_file = import_map.get(call_name)  # None = local or unknown
+
+                if target_file:
+                    # Namespace-isolated: search ONLY in the resolved file
+                    db_results = self.indexer.collection.get(
+                        where={"$and": [{"filename": target_file}, {"name": call_name}]}
+                    )
+                    search_scope = f"in {target_file} (namespace-resolved)"
+                else:
+                    # Fallback: global search (function may be local or built-in)
+                    db_results = self.indexer.collection.get(
+                        where={"name": call_name}
+                    )
+                    search_scope = "global search"
+
                 if db_results and db_results["documents"]:
                     doc = db_results["documents"][0]
                     meta = db_results["metadatas"][0]
                     found_defs.append(
-                        f"Function '{call_name}' is defined in {meta['filename']} (lines {meta['start_line']}-{meta['end_line']}):\n```\n{doc}\n```"
+                        f"Function '{call_name}' [{search_scope}] defined in "
+                        f"{meta['filename']} (lines {meta['start_line']}-{meta['end_line']}):\n"
+                        f"```\n{doc}\n```"
                     )
                     resolved_dependencies.append(call_name)
-            
+
             if found_defs:
-                dependency_context = "\n=== RESOLVED AST DEPENDENCY CONTEXT ===\n" + "\n\n".join(found_defs) + "\n=======================================\n"
+                dependency_context = (
+                    "\n=== RESOLVED AST DEPENDENCY CONTEXT ===\n"
+                    + "\n\n".join(found_defs)
+                    + "\n=======================================\n"
+                )
         except Exception as e:
             print(f"Error resolving AST dependency context: {e}")
 

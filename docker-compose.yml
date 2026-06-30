@@ -1,0 +1,59 @@
+# ============================================================
+# Astra Vision — Docker Compose
+# Local testing: spins up backend + frontend together
+# Usage: docker compose up --build
+# ============================================================
+
+version: "3.9"
+
+services:
+  # ---- Backend: FastAPI + Self-Healing Engine ----
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: astra-vision-backend
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./backend/.env
+    volumes:
+      # Persist ChromaDB vector data across container restarts
+      - chroma-data:/app/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - astra-network
+
+  # ---- Frontend: React (served by Nginx) ----
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: astra-vision-frontend
+    ports:
+      - "3000:80"
+    environment:
+      # For local Docker Compose, the backend is accessed via host machine
+      - REACT_APP_API_BASE=http://localhost:8001
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - astra-network
+
+# ---- Volumes ----
+volumes:
+  chroma-data:
+    driver: local
+
+# ---- Networks ----
+networks:
+  astra-network:
+    driver: bridge

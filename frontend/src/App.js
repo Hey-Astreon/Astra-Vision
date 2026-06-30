@@ -269,7 +269,7 @@ const Spinner = ({ size = 20 }) => (
   typeof CircleNotch !== "undefined" && <CircleNotch size={size} className="animate-spin text-vscode-primary" />
 );
 
-const API_BASE = "http://localhost:8001";
+const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8001";
 
 // Main App component
 function App() {
