@@ -44,6 +44,7 @@ class GenerateFlowRequest(BaseModel):
 
 class ReviewPRRequest(BaseModel):
     diff: str
+    verbosity: Optional[int] = 2
 
 
 class IndexRepoRequest(BaseModel):
@@ -151,7 +152,7 @@ async def review_pr(request: ReviewPRRequest):
         raise HTTPException(status_code=400, detail="Diff cannot be empty")
     
     try:
-        data = router.review_pr(request.diff)
+        data = router.review_pr(request.diff, request.verbosity)
         return {
             "success": True,
             "data": data

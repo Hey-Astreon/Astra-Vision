@@ -245,9 +245,13 @@ class HydraRouter:
             "diagram": "graph TD; A[Start] --> B[Process Code]; B --> C[End];"
         }
 
-    def review_pr(self, diff: str) -> dict:
+    def review_pr(self, diff: str, verbosity: int = 2) -> dict:
         """
         Uses Nvidia's Nemotron-3-Ultra-550b-a55b with thinking enabled for deep security reviews.
+        Customizes audit instructions dynamically according to the requested verbosity level:
+          - 1 (Focus / Security): Only report critical vulnerabilities, logic/memory leaks. Ignore styles.
+          - 2 (Standard): Report security, logic bugs, and major code smells.
+          - 3 (Strict / Verbose): Complete review including style, documentation, naming, and minor nits.
         """
         # Query semantic codebase context related to the diff
         context_chunks = self.indexer.search_context(diff, limit=3)
@@ -258,9 +262,32 @@ class HydraRouter:
                 for c in context_chunks
             ])
 
+        # Define verbosity instructions
+        if verbosity == 1:
+            verbosity_instruction = (
+                "Target ONLY critical issues, security vulnerabilities (like SQL injections, CSRF, XSS), "
+                "memory leaks, and severe concurrency bugs. IGNORE naming conventions, style guides, formatting, "
+                "or missing comments. If no critical bugs are found, return an empty comments list. Keep it extremely focused."
+            )
+        elif verbosity == 3:
+            verbosity_instruction = (
+                "Perform a complete, verbose code audit. Flag security, performance, logic, style rules, "
+                "formatting inconsistencies, naming conventions, missing documentation/comments, and any minor code smells. "
+                "Be highly detailed and thorough."
+            )
+        else:
+            # Default standard level 2
+            verbosity_instruction = (
+                "Target security issues, performance optimization, logic errors, and major code smells. "
+                "Ignore minor nitpicky style rules or formatting issues."
+            )
+
         prompt = f"""
-        Perform a comprehensive code review on the following git diff, taking into account the related codebase context.
-        Focus on finding security vulnerabilities, memory leaks, performance issues, and code smells.
+        Perform a code review on the following git diff, taking into account the related codebase context.
+        
+        Focus instruction based on requested audit depth:
+        {verbosity_instruction}
+
         Format your response strictly as a JSON object with a key "comments" containing a list of review comments:
         {{
             "comments": [

@@ -312,6 +312,7 @@ function App() {
   const [prReview, setPrReview] = useState(null);
   const [loadingReview, setLoadingReview] = useState(false);
   const [severityFilter, setSeverityFilter] = useState('All');
+  const [reviewVerbosity, setReviewVerbosity] = useState(2); // 1 = Focus/Security, 2 = Standard, 3 = Strict/Verbose
   const [indexingStatus, setIndexingStatus] = useState('');
   const [selfHealResults, setSelfHealResults] = useState({});
   
@@ -671,7 +672,8 @@ function App() {
     try {
       const mockDiff = `+++ b/${selectedFile?.name || 'app.js'}\n${fileContent}`;
       const response = await axios.post(`${API_BASE}/api/review-pr`, {
-        diff: mockDiff
+        diff: mockDiff,
+        verbosity: reviewVerbosity
       });
       
       if (response.data && response.data.success) {
@@ -1391,6 +1393,30 @@ function App() {
                 {loadingReview ? <CircleNotch size={12} className="animate-spin" /> : <Lightning size={12} />}
                 Run Audit
               </button>
+            </div>
+
+            {/* Review Verbosity Focus Slider */}
+            <div className="mb-3 bg-vscode-input/30 p-2.5 rounded border border-vscode-border/50">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] text-vscode-muted font-mono uppercase tracking-wider">Review Focus:</span>
+                <span className="text-[10px] text-vscode-warning font-mono font-bold uppercase">
+                  {reviewVerbosity === 1 ? "Focus / Security" : reviewVerbosity === 3 ? "Strict / Verbose" : "Standard"}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="1"
+                value={reviewVerbosity}
+                onChange={(e) => setReviewVerbosity(Number(e.target.value))}
+                className="w-full h-1 bg-vscode-border rounded-lg appearance-none cursor-pointer accent-vscode-warning"
+              />
+              <div className="flex justify-between text-[8px] text-vscode-muted font-mono mt-1 px-0.5">
+                <span>Security Only</span>
+                <span>Standard</span>
+                <span>All Nits</span>
+              </div>
             </div>
 
             {prReview && !prReview.error && (
