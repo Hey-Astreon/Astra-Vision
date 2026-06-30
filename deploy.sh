@@ -39,13 +39,22 @@ else
     read -p "Enter GEMINI_API_KEY: " GEMINI_KEY
 fi
 
-# 3. Deploy Backend
+# 3. Create Artifact Registry Repository (if not exists)
+echo ""
+echo "[3/4] Setting up Artifact Registry Repository..."
+gcloud artifacts repositories create astra-repo \
+    --repository-format=docker \
+    --location=us-central1 \
+    --description="Astra Vision Docker Repository" \
+    --quiet 2>/dev/null || echo "Repository 'astra-repo' already exists or is being created."
+
+# 4. Deploy Backend
 echo ""
 echo "[3/4] Deploying Backend to Cloud Run..."
 cd backend
-gcloud builds submit --tag gcr.io/$PROJECT_ID/astra-backend .
+gcloud builds submit --tag us-central1-docker.pkg.dev/$PROJECT_ID/astra-repo/astra-backend:latest .
 gcloud run deploy astra-backend \
-    --image gcr.io/$PROJECT_ID/astra-backend \
+    --image us-central1-docker.pkg.dev/$PROJECT_ID/astra-repo/astra-backend:latest \
     --platform managed \
     --region us-central1 \
     --allow-unauthenticated \
@@ -59,15 +68,15 @@ cd ..
 BACKEND_URL=$(gcloud run services describe astra-backend --region us-central1 --format "value(status.url)")
 echo "[OK] Backend deployed at: $BACKEND_URL"
 
-# 4. Deploy Frontend
+# 5. Deploy Frontend
 echo ""
 echo "[4/4] Deploying Frontend to Cloud Run..."
 echo "REACT_APP_API_BASE=$BACKEND_URL" > frontend/.env.production
 
 cd frontend
-gcloud builds submit --tag gcr.io/$PROJECT_ID/astra-frontend .
+gcloud builds submit --tag us-central1-docker.pkg.dev/$PROJECT_ID/astra-repo/astra-frontend:latest .
 gcloud run deploy astra-frontend \
-    --image gcr.io/$PROJECT_ID/astra-frontend \
+    --image us-central1-docker.pkg.dev/$PROJECT_ID/astra-repo/astra-frontend:latest \
     --platform managed \
     --region us-central1 \
     --allow-unauthenticated \
