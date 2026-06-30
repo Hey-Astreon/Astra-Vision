@@ -9,8 +9,7 @@ PROJECT_ID=$(gcloud config get-value project)
 
 if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "(unset)" ]; then
     echo "Error: No active Google Cloud Project selected."
-    echo "Please create a project in Google Cloud Console and select it: "
-    echo "gcloud config set project YOUR_PROJECT_ID"
+    echo "Please run: gcloud config set project YOUR_PROJECT_ID"
     exit 1
 fi
 
@@ -18,37 +17,13 @@ echo "[INFO] Deploying to GCP Project ID: $PROJECT_ID"
 echo ""
 
 # 1. Enable APIs
-echo "[1/4] Enabling Cloud Run and Build APIs (this may take a minute)..."
-gcloud services enable run.googleapis.com \
-                       cloudbuild.googleapis.com \
-                       containerregistry.googleapis.com \
-                       artifactregistry.googleapis.com
-
-# 1b. Grant permissions to Build & Compute service accounts
-echo "[1b/4] Configuring service account permissions..."
-PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
-
-# Grant to Compute default service account (used by Cloud Build)
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-    --role="roles/artifactregistry.writer" \
-    --quiet >/dev/null
-
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
-    --role="roles/logging.logWriter" \
-    --quiet >/dev/null
-
-# Grant to Cloud Build service account
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-    --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
-    --role="roles/artifactregistry.writer" \
-    --quiet >/dev/null
-
-gcloud projects add-iam-policy-binding $PROJECT_ID \
-    --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
-    --role="roles/logging.logWriter" \
-    --quiet >/dev/null
+echo "[1/4] Enabling required APIs (this may take a minute)..."
+gcloud services enable \
+    run.googleapis.com \
+    cloudbuild.googleapis.com \
+    artifactregistry.googleapis.com \
+    --quiet
+echo "[OK] APIs enabled."
 
 # 2. Handle Env keys
 echo ""
@@ -64,60 +39,48 @@ else
     read -p "Enter NVIDIA_API_KEY: " NVIDIA_KEY
     read -p "Enter GEMINI_API_KEY: " GEMINI_KEY
 fi
+echo "[OK] API keys loaded."
 
-# 3. Create Artifact Registry Repository (if not exists)
+# 3. Deploy Backend using --source (no manual Docker push needed)
 echo ""
-echo "[3/4] Setting up Artifact Registry Repository..."
-gcloud artifacts repositories create astra-repo \
-    --repository-format=docker \
-    --location=us-central1 \
-    --description="Astra Vision Docker Repository" \
-    --quiet 2>/dev/null || echo "Repository 'astra-repo' already exists or is being created."
-
-# 4. Deploy Backend
-echo ""
-echo "[3/4] Deploying Backend to Cloud Run..."
-cd backend
-gcloud builds submit --tag us-central1-docker.pkg.dev/$PROJECT_ID/astra-repo/astra-backend:latest .
+echo "[3/4] Deploying Backend to Cloud Run (this will take ~3-5 minutes)..."
 gcloud run deploy astra-backend \
-    --image us-central1-docker.pkg.dev/$PROJECT_ID/astra-repo/astra-backend:latest \
+    --source ./backend \
     --platform managed \
     --region us-central1 \
     --allow-unauthenticated \
     --memory 1Gi \
     --cpu 1 \
     --timeout 300 \
-    --set-env-vars "CEREBRAS_API_KEY=$CEREBRAS_KEY,NVIDIA_API_KEY=$NVIDIA_KEY,GEMINI_API_KEY=$GEMINI_KEY"
-cd ..
+    --set-env-vars "CEREBRAS_API_KEY=${CEREBRAS_KEY},NVIDIA_API_KEY=${NVIDIA_KEY},GEMINI_API_KEY=${GEMINI_KEY}" \
+    --quiet
 
 # Fetch backend URL
 BACKEND_URL=$(gcloud run services describe astra-backend --region us-central1 --format "value(status.url)")
 echo "[OK] Backend deployed at: $BACKEND_URL"
 
-# 5. Deploy Frontend
+# 4. Deploy Frontend using --source (no manual Docker push needed)
 echo ""
-echo "[4/4] Deploying Frontend to Cloud Run..."
-echo "REACT_APP_API_BASE=$BACKEND_URL" > frontend/.env.production
+echo "[4/4] Deploying Frontend to Cloud Run (this will take ~3-5 minutes)..."
+echo "REACT_APP_API_BASE=${BACKEND_URL}" > frontend/.env.production
 
-cd frontend
-gcloud builds submit --tag us-central1-docker.pkg.dev/$PROJECT_ID/astra-repo/astra-frontend:latest .
 gcloud run deploy astra-frontend \
-    --image us-central1-docker.pkg.dev/$PROJECT_ID/astra-repo/astra-frontend:latest \
+    --source ./frontend \
     --platform managed \
     --region us-central1 \
     --allow-unauthenticated \
-    --memory 256Mi \
+    --memory 512Mi \
     --cpu 1 \
-    --port 80
-cd ..
+    --port 80 \
+    --quiet
 
 # Fetch frontend URL
 FRONTEND_URL=$(gcloud run services describe astra-frontend --region us-central1 --format "value(status.url)")
 
 echo ""
 echo "=========================================================="
-echo "🎉 DEPLOYMENT SUCCESSFUL!"
+echo "DEPLOYMENT SUCCESSFUL!"
 echo "=========================================================="
 echo "Frontend App (Share this!):  $FRONTEND_URL"
-echo "Backend Health:             $BACKEND_URL/api/health"
+echo "Backend Health:              $BACKEND_URL/api/health"
 echo "=========================================================="
