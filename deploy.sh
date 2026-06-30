@@ -24,6 +24,32 @@ gcloud services enable run.googleapis.com \
                        containerregistry.googleapis.com \
                        artifactregistry.googleapis.com
 
+# 1b. Grant permissions to Build & Compute service accounts
+echo "[1b/4] Configuring service account permissions..."
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
+
+# Grant to Compute default service account (used by Cloud Build)
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    --role="roles/artifactregistry.writer" \
+    --quiet >/dev/null
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    --role="roles/logging.logWriter" \
+    --quiet >/dev/null
+
+# Grant to Cloud Build service account
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
+    --role="roles/artifactregistry.writer" \
+    --quiet >/dev/null
+
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
+    --role="roles/logging.logWriter" \
+    --quiet >/dev/null
+
 # 2. Handle Env keys
 echo ""
 echo "[2/4] Setting up API keys..."
