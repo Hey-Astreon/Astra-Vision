@@ -11,7 +11,7 @@ WORKDIR /app
 
 # Copy package files and install dependencies (layer caching)
 COPY package.json package-lock.json ./
-RUN npm ci --silent
+RUN npm install
 
 # Copy source and build for production
 COPY . .
