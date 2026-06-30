@@ -15,6 +15,82 @@ class SelfHealEngine:
         else:
             self.gemini_configured = False
 
+    def _wrap_js_sandbox(self, code: str) -> str:
+        """
+        Injects browser DOM mocks and overrides Node's global require function
+        to block dangerous host-level system modules.
+        """
+        wrapper = """
+// ── Browser DOM / Globals Mocking ──
+if (typeof global !== 'undefined') {
+    global.window = global.window || {};
+    global.document = global.document || {
+        createElement: () => ({ style: {}, appendChild: () => {}, setAttribute: () => {} }),
+        getElementById: () => null,
+        querySelector: () => null
+    };
+    
+    // Force override localStorage/sessionStorage to guarantee mock implementation works
+    global.localStorage = {
+        _data: {},
+        getItem: function(k) { return this._data[k] || null; },
+        setItem: function(k, v) { this._data[k] = String(v); },
+        removeItem: function(k) { delete this._data[k]; },
+        clear: function() { this._data = {}; }
+    };
+    global.sessionStorage = global.localStorage;
+    global.navigator = global.navigator || { userAgent: "node" };
+    global.location = global.location || { href: "", pathname: "/" };
+}
+
+// ── Sandbox Module Restrictions ──
+if (typeof require !== 'undefined') {
+    const blockedModules = ['fs', 'child_process', 'cluster', 'net', 'dgram', 'dns', 'http', 'https', 'tls'];
+    const originalRequire = require;
+    global.require = function(modName) {
+        if (blockedModules.includes(modName)) {
+            throw new Error("Security Violation: Module '" + modName + "' is blocked in this sandbox.");
+        }
+        return originalRequire(modName);
+    };
+}
+"""
+        return wrapper + "\n" + code
+
+    def _wrap_py_sandbox(self, code: str) -> str:
+        """
+        Overrides python's builtins and import hook searchers to raise exceptions
+        if LLM-generated code attempts file I/O or system execution.
+        """
+        wrapper = """
+# ── Sandbox Import Restrictions ──
+import builtins
+import sys
+
+blocked_modules = ['os', 'subprocess', 'socket', 'urllib', 'requests', 'shutil', 'ftplib']
+
+# Clear from cache first in case they are pre-loaded
+for mod in blocked_modules:
+    if mod in sys.modules:
+        del sys.modules[mod]
+
+original_import = builtins.__import__
+
+def restricted_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if any(name.startswith(blocked) for blocked in blocked_modules):
+        raise ImportError(f"Security Violation: Module '{name}' is blocked in this sandbox.")
+    return original_import(name, globals, locals, fromlist, level)
+
+builtins.__import__ = restricted_import
+
+# ── Sandbox File/Execution Restrictions ──
+def restricted_open(*args, **kwargs):
+    raise PermissionError("Security Violation: File I/O operations ('open') are blocked in this sandbox.")
+
+builtins.open = restricted_open
+"""
+        return wrapper + "\n" + code
+
     def run_code(self, code: str, language: str, timeout: int = 5) -> dict:
         """
         Executes code string in a sandboxed subprocess and checks for assertion results.
@@ -22,11 +98,14 @@ class SelfHealEngine:
         """
         is_js = language.lower() in ["javascript", "js"]
         
+        # Apply safety and global environment wrappers
+        wrapped_code = self._wrap_js_sandbox(code) if is_js else self._wrap_py_sandbox(code)
+        
         try:
             if is_js:
                 # Execute in Node.js
                 result = subprocess.run(
-                    ["node", "-e", code],
+                    ["node", "-e", wrapped_code],
                     timeout=timeout,
                     capture_output=True,
                     text=True
@@ -34,7 +113,7 @@ class SelfHealEngine:
             else:
                 # Execute in Python
                 result = subprocess.run(
-                    ["python", "-c", code],
+                    ["python", "-c", wrapped_code],
                     timeout=timeout,
                     capture_output=True,
                     text=True
