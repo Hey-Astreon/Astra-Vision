@@ -1,5 +1,6 @@
 import os
 import re
+import hashlib
 from openai import OpenAI
 import chromadb
 from chromadb.config import Settings
@@ -94,44 +95,97 @@ class CodeIndexer:
 
     def index_repository(self, files: dict) -> dict:
         """
-        Clears the database collection and indexes the new repo files.
-        files input: { "src/app.js": "file content here", ... }
+        Performs incremental/differential updates of the database collection.
+        Surgically deletes only added/modified/deleted files, preserving the rest of the database index.
         """
-        # Clear existing elements
-        self.chroma_client.delete_collection("astra_vision_codebase")
-        self.collection = self.chroma_client.get_or_create_collection(
-            name="astra_vision_codebase"
-        )
-        
-        all_chunks = []
+        # Get existing chunks and build a map of: { filename: current_file_hash }
+        existing_file_hashes = {}
+        try:
+            existing = self.collection.get(include=["metadatas"])
+            if existing and existing["metadatas"]:
+                for meta in existing["metadatas"]:
+                    filename = meta.get("filename")
+                    file_hash = meta.get("file_hash")
+                    if filename and file_hash:
+                        existing_file_hashes[filename] = file_hash
+        except Exception as e:
+            print(f"Warning: Could not check existing indexed files: {e}")
+
+        files_to_index = []
+        files_to_delete = []
+        skipped_count = 0
+
+        # Identify added/modified files
         indexed_file_keys = set(files.keys())
         for filepath, content in files.items():
             if not content.strip():
                 continue
-            all_chunks.extend(self.chunk_file(filepath, content, indexed_file_keys))
             
-        if not all_chunks:
-            return {"success": True, "indexed_chunks": 0}
+            # Compute current file checksum
+            current_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
+            existing_hash = existing_file_hashes.get(filepath)
 
-        # Index in ChromaDB
+            if existing_hash != current_hash:
+                files_to_index.append((filepath, content, current_hash))
+                if existing_hash:
+                    # File was modified; mark old records for deletion
+                    files_to_delete.append(filepath)
+            else:
+                skipped_count += 1
+
+        # Identify deleted files (exist in DB but missing from incoming payload)
+        for filepath in existing_file_hashes.keys():
+            if filepath not in files:
+                files_to_delete.append(filepath)
+
+        # 1. Surgically remove old/deleted files from collection
+        for filepath in files_to_delete:
+            try:
+                self.collection.delete(where={"filename": filepath})
+            except Exception as e:
+                print(f"Error removing chunks for {filepath}: {e}")
+
+        if not files_to_index:
+            return {
+                "success": True, 
+                "indexed_chunks": 0, 
+                "skipped_files": skipped_count, 
+                "deleted_files": len(files_to_delete)
+            }
+
+        # 2. Chunk only modified/added files
+        all_chunks = []
+        for filepath, content, current_hash in files_to_index:
+            file_chunks = self.chunk_file(filepath, content, indexed_file_keys)
+            for chunk in file_chunks:
+                chunk["metadata"]["file_hash"] = current_hash
+            all_chunks.extend(file_chunks)
+
+        if not all_chunks:
+            return {
+                "success": True, 
+                "indexed_chunks": 0, 
+                "skipped_files": skipped_count, 
+                "deleted_files": len(files_to_delete)
+            }
+
+        # 3. Generate embeddings and index new chunks
         ids = []
         embeddings = []
         documents = []
         metadatas = []
         
         for idx, chunk in enumerate(all_chunks):
-            chunk_id = f"chunk_{idx}_{chunk['metadata']['filename']}"
+            chunk_id = f"chunk_{idx}_{chunk['metadata']['filename']}_{hashlib.md5(chunk['text'].encode('utf-8')).hexdigest()[:8]}"
             ids.append(chunk_id)
             documents.append(chunk["text"])
             metadatas.append(chunk["metadata"])
             
-            # Generate embedding
             if self.nvidia_client:
                 try:
                     embeddings.append(self.get_embedding(chunk["text"], is_query=False))
                 except Exception as e:
                     print(f"Failed to generate embedding for {chunk_id}: {e}")
-                    # Fallback empty embedding (we will omit adding this chunk if embedding fails)
                     continue
             
         if embeddings:
@@ -142,7 +196,12 @@ class CodeIndexer:
                 metadatas=metadatas[:len(embeddings)]
             )
             
-        return {"success": True, "indexed_chunks": len(embeddings)}
+        return {
+            "success": True, 
+            "indexed_chunks": len(embeddings),
+            "skipped_files": skipped_count,
+            "deleted_files": len(files_to_delete)
+        }
 
     def search_context(self, query: str, limit: int = 3) -> list:
         """
