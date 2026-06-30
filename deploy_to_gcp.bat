@@ -87,7 +87,8 @@ gcloud run deploy %FRONTEND_SERVICE% ^
     --region %GCP_REGION% ^
     --allow-unauthenticated ^
     --memory 256Mi ^
-    --cpu 1
+    --cpu 1 ^
+    --port 80
 cd ..
 
 :: Get the frontend URL

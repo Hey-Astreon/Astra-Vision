@@ -71,7 +71,8 @@ gcloud run deploy astra-frontend \
     --region us-central1 \
     --allow-unauthenticated \
     --memory 256Mi \
-    --cpu 1
+    --cpu 1 \
+    --port 80
 cd ..
 
 # Fetch frontend URL
