@@ -165,55 +165,79 @@ Astra Vision also includes utility tools at the bottom of the right panel.
 
 ## 🚀 Key Innovation Pillars (Under the Hood)
 
-### 🧠 1. Hydra Protocol Multi-Model Routing
-Astra Vision coordinates specialized LLM engines through the **Hydra Protocol** based on speed, reasoning capabilities, and token budgets:
-
-*   **Speed Layer (Cerebras - gpt-oss-120b)**: Dispatches instant, sub-second responses for interactive code explanation and logic flows.
-*   **Reasoning Layer (Nvidia NIM - nemotron-3-ultra-550b-a55b)**: Utilizes reasoning budget tokens to scan code changes (Git diffs) for deep-seated security flaws, race conditions, memory leaks, and architectural issues.
-*   **Healing Layer (Google AI Studio - Gemini-2.5-Flash)**: Orchestrates recursive token generation to construct tests, execute sandbox runs, and emit structural code repairs.
-
----
-
-### 🕸️ 2. AST Dependency Graphing & ChromaDB Indexing
-Rather than splitting files using standard character counters, Astra Vision analyzes the **Abstract Syntax Tree (AST)** using tree-sitter bindings for JavaScript and Python:
+### 🧠 1. Hydra Protocol & System Architecture
+Astra Vision coordinates multiple specialized AI models, Abstract Syntax Tree compilers, and sandboxed runtimes through an orchestrated execution topology:
 
 ```mermaid
 graph TD
-    A[Code Repository] -->|Parsed by| B(tree-sitter Engine)
-    B -->|Extracts| C[Function Boundaries]
-    B -->|Extracts| D[Imports & Module Edges]
-    B -->|Extracts| E[Call Expressions]
-    
-    C --> F[(ChromaDB Collection)]
-    D --> F
-    E --> F
-    
-    G[Developer Requests Explanation] --> H[Hydra Router]
-    H -->|1. Parse Call Sites| F
-    F -->|2. Resolve Imports| F
-    F -->|3. Fetch Dependency Code| I[Resolved Source Code]
-    H -->|4. Assemble Prompt| J[LLM Context Payload]
-    J --> K[God-Mode Explanation]
-```
+    %% Styling
+    classDef gcp fill:#4285F4,stroke:#333,stroke-width:1px,color:#fff;
+    classDef tool fill:#8E24AA,stroke:#333,stroke-width:1px,color:#fff;
+    classDef db fill:#F4511E,stroke:#333,stroke-width:1px,color:#fff;
+    classDef model fill:#00ACC1,stroke:#333,stroke-width:1px,color:#fff;
 
-#### How Metadata-Guided Context Works
-When a file is indexed, each function is parsed into a separate ChromaDB document. Its metadata is enriched with structural references:
-```json
-{
-  "filename": "src/app.js",
-  "name": "startApp",
-  "type": "function",
-  "start_line": 4,
-  "end_line": 12,
-  "calls": "helper,validateInput",
-  "imports": "./utils,./validator"
-}
+    A[Monaco Code Editor] -->|1. Run Audit / Explain| B(Hydra Router Services)
+    B -->|2. Query Context| C[(ChromaDB Vector Store)]::db
+    
+    %% Option 1 & 3 integration
+    B -->|3. Compile AST & Imports| D(Tree-Sitter Compiler Engine)::tool
+    D -->|4. Resolve Local Paths| E[Hashed Delta Checks & MD5 Signatures]
+    E -->|Update Changed Only| C
+    
+    %% Option 2 Sandbox integration
+    A -->|5. Trigger Self-Heal| F(Self-Healing Sandbox Engine)
+    F -->|6. Wrap Safe Code & Inject DOM Mocks| G[Subprocess Sandbox Exec]
+    G -->|7. Run Tests & Catch Exceptions| H[Node.js / Python Runtime]
+    H -->|8. Apply Verified Fix| A
+
+    %% Models
+    B -->|Cerebras gpt-oss-120b| I[Speed Layer: sub-second explanations]::model
+    B -->|Nvidia NIM Nemotron 550b| J[Reasoning Layer: deep security reviews]::model
+    F -->|Google Gemini 2.5| K[Generation Layer: test & fix code]::model
+
+    class B,F gcp;
 ```
-If a developer asks to explain `startApp()`, Astra Vision detects the calls to `helper` and `validateInput`, queries ChromaDB for functions matching those names, and automatically appends their source definitions into the LLM context.
 
 ---
 
-### 🎨 3. Monaco Inline Diagnostics
+### 🛡️ 2. AST Path Resolution & Namespace Isolation (Option 1)
+To handle professional, multi-directory repositories without name collisions (e.g. multiple files defining a `validate()` function), Astra Vision implements:
+*   **Path Resolvers**: Translates relative (`./utils`), parent (`../auth`), and index package imports (`/__init__.py`, `/index.js`) to absolute workspace identifiers.
+*   **Namespace-Isolated Queries**: When analyzing function calls, the indexer queries ChromaDB utilizing strict `$and` filters:
+    ```python
+    db_results = collection.get(
+        where={"$and": [{"filename": resolved_import_path}, {"name": call_name}]}
+    )
+    ```
+    This completely eliminates namespace collisions across different files and modules.
+
+---
+
+### ⚡ 3. Hashed Incremental Indexing & Git Syncing (Option 3)
+Instead of re-embedding the entire repository on every change, Astra Vision computes MD5 checksum hashes of file contents:
+*   **Differential Updates**: Compares workspace file hashes against signatures stored in ChromaDB metadata.
+*   **Zero-Overhead Skips**: Files that have not been modified are skipped, reducing Nvidia NIM embedding requests by **over 95%** and preventing rate-limit blocks.
+*   **Surgical Deletion**: Only modified or deleted files have their old vector chunks removed using targeted `filename` metadata deletions before writing updates.
+
+---
+
+### 🔒 4. Secure Sandbox Isolation & DOM Environment Mocking (Option 2)
+To execute LLM-generated code safely without putting the developer's host machine at risk, Astra Vision introduces strict sandbox boundaries:
+1.  **Browser DOM Mocks**: Prefixes JavaScript code with mock global structures (e.g. fake `window`, `document`, and custom mock implementations for `localStorage` and `sessionStorage`) so UI-reliant components run without reference errors.
+2.  **OS Security Intercepts**: Overrides Node's global `require()` to block dangerous host-level modules (`fs`, `child_process`, `net`, `http`, etc.):
+    ```javascript
+    global.require = function(modName) {
+        if (['fs', 'child_process', 'net'].includes(modName)) {
+            throw new Error("Security Violation: Module blocked.");
+        }
+        return originalRequire(modName);
+    };
+    ```
+3.  **Python File I/O Lockouts**: Intercepts `builtins.open` to raise a `PermissionError` on file access and overrides `builtins.__import__` to block `os`, `subprocess`, and network socket modules.
+
+---
+
+### 🎨 5. Monaco Inline Diagnostics
 Injects warnings directly into the editor viewport to avoid context-switching:
 1.  **Severity Mapping**:
     *   `Critical` ➔ `monaco.MarkerSeverity.Error` (Red squiggly)
@@ -222,15 +246,6 @@ Injects warnings directly into the editor viewport to avoid context-switching:
     *   `Style` ➔ `monaco.MarkerSeverity.Hint` (Faded underline)
 2.  **Coordinates Mapping**: Dynamically calculates character offsets and non-whitespace starts for each line to align underlines with code tokens.
 3.  **Active Hover tooltips**: Hovering over underlined code segments displays a hover popup styled with the `[Astra Vision]` tag and issue details.
-
----
-
-### ⚡ 4. The Self-Healing Sandbox Cycle
-The self-healing cycle runs entirely in local, isolated subprocess sandboxes:
-
-*   **JavaScript Sandbox**: Spawns `node -e <code>` using a 5-second hard timeout constraint.
-*   **Python Sandbox**: Spawns `python -c <code>` with strict execution boundaries.
-*   **Assertion-based confirmation**: Tests do not require third-party frameworks like Jest or pytest. Gemini generates pure assertions (`console.assert` or `assert`) and flags execution status with `__TEST_PASSED__` and `__TEST_FAILED__` output tokens.
 
 ---
 
