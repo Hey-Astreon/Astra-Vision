@@ -14,6 +14,7 @@ from typing import Optional, Set
 try:
     import tree_sitter_javascript as tsjava
     import tree_sitter_python as tspython
+    import tree_sitter_go as tsgo
     from tree_sitter import Language, Parser
     TREE_SITTER_AVAILABLE = True
 except ImportError:
@@ -25,8 +26,10 @@ class ASTParser:
         if TREE_SITTER_AVAILABLE:
             self.js_language = Language(tsjava.language())
             self.py_language = Language(tspython.language())
+            self.go_language = Language(tsgo.language())
             self.js_parser = Parser(self.js_language)
             self.py_parser = Parser(self.py_language)
+            self.go_parser = Parser(self.go_language)
         
     def _detect_language(self, filename: str) -> Optional[str]:
         """Return canonical language string from filename extension."""
@@ -35,6 +38,8 @@ class ASTParser:
             return "javascript"
         if ext == "py":
             return "python"
+        if ext == "go":
+            return "go"
         return None
 
     def _get_parser(self, language: str):
@@ -42,6 +47,8 @@ class ASTParser:
             return self.js_parser
         if language == "python":
             return self.py_parser
+        if language == "go":
+            return self.go_parser
         return None
 
     def _get_node_text(self, node, source_bytes: bytes) -> str:
@@ -96,7 +103,7 @@ class ASTParser:
                 return normalized
 
             # 2. Try common code extensions
-            for ext in (".js", ".jsx", ".ts", ".tsx", ".mjs", ".py"):
+            for ext in (".js", ".jsx", ".ts", ".tsx", ".mjs", ".py", ".go"):
                 candidate = f"{normalized}{ext}"
                 if candidate in indexed_files:
                     return candidate
@@ -124,7 +131,7 @@ class ASTParser:
         """
         language = self._detect_language(filename)
 
-        if TREE_SITTER_AVAILABLE and language in ("javascript", "python"):
+        if TREE_SITTER_AVAILABLE and language in ("javascript", "python", "go"):
             return self._ast_extract_functions(filename, content, language)
         
         return self._regex_fallback_chunks(filename, content)
@@ -145,6 +152,8 @@ class ASTParser:
             raw = self._js_extract_imports(filename, content)
         elif TREE_SITTER_AVAILABLE and language == "python":
             raw = self._py_extract_imports(filename, content)
+        elif TREE_SITTER_AVAILABLE and language == "go":
+            raw = self._go_extract_imports(filename, content)
         else:
             raw = self._regex_extract_imports(filename, content)
 
@@ -191,12 +200,16 @@ class ASTParser:
             "python": {
                 "function_definition", "async_function_definition",
                 "decorated_definition"
+            },
+            "go": {
+                "function_declaration", "method_declaration"
             }
         }
 
         CLASS_TYPES = {
             "javascript": {"class_declaration", "class_expression"},
             "python": {"class_definition"},
+            "go": {"type_spec"}
         }
 
         def walk(node):
@@ -360,6 +373,32 @@ class ASTParser:
             for child in node.children:
                 walk(child)
 
+        walk(tree.root_node)
+        return imports
+
+    def _go_extract_imports(self, filename: str, content: str) -> list:
+        parser = self.go_parser
+        source_bytes = content.encode("utf-8")
+        tree = parser.parse(source_bytes)
+        
+        imports = []
+        
+        def walk(node):
+            if node.type == "import_spec":
+                path_child = node.child_by_field_name("path")
+                if path_child:
+                    source = self._get_node_text(path_child, source_bytes).strip("'\"` ")
+                    alias_child = node.child_by_field_name("name")
+                    aliases = [self._get_node_text(alias_child, source_bytes)] if alias_child else []
+                    imports.append({
+                        "source_file": filename,
+                        "imported_from": source,
+                        "aliases": aliases
+                    })
+            
+            for child in node.children:
+                walk(child)
+        
         walk(tree.root_node)
         return imports
 
