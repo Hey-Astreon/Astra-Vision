@@ -506,7 +506,6 @@ function App() {
     if (file.type === 'dir') return;
     
     setSelectedFile(file);
-    setLoadingFile(true);
     
     // Add to tabs if not already open
     if (!openTabs.find(tab => tab.path === file.path)) {
@@ -518,6 +517,18 @@ function App() {
     setCodeExplanation(null);
     setErrorExplanation(null);
     setFlowDiagram(null);
+    
+    // Check if model already exists in Monaco environment to prevent network call
+    if (monacoRef.current) {
+      const uri = monacoRef.current.Uri.file(file.path);
+      const existingModel = monacoRef.current.editor.getModel(uri);
+      if (existingModel) {
+        // Model is already loaded, Monaco will automatically switch to it
+        return;
+      }
+    }
+    
+    setLoadingFile(true);
     
     // Check if this is a demo mode file
     if (MOCK_REPO_FILES[file.path]) {
@@ -542,6 +553,15 @@ function App() {
     e.stopPropagation();
     const newTabs = openTabs.filter(tab => tab.path !== tabPath);
     setOpenTabs(newTabs);
+    
+    // Safely dispose of Monaco model to prevent memory leaks
+    if (monacoRef.current) {
+      const uri = monacoRef.current.Uri.file(tabPath);
+      const model = monacoRef.current.editor.getModel(uri);
+      if (model) {
+        model.dispose();
+      }
+    }
     
     if (activeTab === tabPath) {
       if (newTabs.length > 0) {
@@ -1117,8 +1137,9 @@ function App() {
           {selectedFile ? (
             <Editor
               height="100%"
+              path={selectedFile.path}
               language={getLanguage(selectedFile.name)}
-              value={fileContent}
+              defaultValue={fileContent}
               theme="vs-dark"
               onMount={handleEditorMount}
               options={{
