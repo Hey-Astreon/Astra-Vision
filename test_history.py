@@ -8,8 +8,8 @@ import os
 # Ensure the backend directory is in the import path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'backend')))
 
-import server
-from server import app
+import server  # type: ignore
+from server import app  # type: ignore
 
 client = TestClient(app)
 
