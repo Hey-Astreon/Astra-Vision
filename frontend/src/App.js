@@ -291,6 +291,10 @@ function App() {
   const [expandedFolders, setExpandedFolders] = useState(new Set());
   const [openTabs, setOpenTabs] = useState([]);
   const [activeTab, setActiveTab] = useState(null);
+  const [activeLeftTab, setActiveLeftTab] = useState('explorer');
+  const [historyList, setHistoryList] = useState([]);
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
+  const [loadingHistory, setLoadingHistory] = useState(false);
   
   // Loading states
   const [loadingRepo, setLoadingRepo] = useState(false);
@@ -575,6 +579,94 @@ function App() {
       }
     }
   };
+
+  // Fetch action history timeline
+  const fetchHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const response = await axios.get(`${API_BASE}/api/history`);
+      if (response.data && response.data.success) {
+        setHistoryList(response.data.data);
+      }
+    } catch (err) {
+      console.error("Error fetching action history:", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  // Search action history semantically
+  const handleSearchHistory = async () => {
+    if (!historySearchQuery.trim()) {
+      fetchHistory();
+      return;
+    }
+    setLoadingHistory(true);
+    try {
+      const response = await axios.post(`${API_BASE}/api/history/search`, {
+        query: historySearchQuery
+      });
+      if (response.data && response.data.success) {
+        setHistoryList(response.data.data);
+      }
+    } catch (err) {
+      console.error("Error searching history:", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  // Restore history state locally into active viewer panels
+  const restoreHistoryItem = (item) => {
+    try {
+      const metadata = item.metadata;
+      const payload = JSON.parse(metadata.payload);
+      
+      if (metadata.type === "explanation") {
+        setCodeExplanation(payload.results);
+        setPrReview(null);
+        if (payload.code) {
+          setFileContent(payload.code);
+          setSelectedFile({ name: payload.filename, path: payload.filename });
+        }
+      } else if (metadata.type === "self_heal") {
+        setPrReview({
+          comments: [
+            {
+              line: 1,
+              severity: "Warning",
+              text: payload.audit_comment,
+              why: "Healed code block restored from Action Memory."
+            }
+          ]
+        });
+        setSelfHealResults({
+          0: {
+            loading: false,
+            progressStep: 4,
+            ...payload.results
+          }
+        });
+        setCodeExplanation(null);
+        if (payload.code) {
+          setFileContent(payload.code);
+          setSelectedFile({ 
+            name: `healed_snippet.${payload.language === 'python' ? 'py' : 'js'}`, 
+            path: 'self_healed_snippet' 
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Failed to restore history item:", err);
+    }
+  };
+
+  // Query history whenever memory tab is opened
+  useEffect(() => {
+    if (activeLeftTab === 'memory') {
+      fetchHistory();
+    }
+  }, [activeLeftTab]);
   
   // Toggle folder expand
   const toggleFolder = (path) => {
@@ -1053,41 +1145,125 @@ function App() {
           )}
         </div>
         
-        {/* File Explorer */}
-        <div className="flex-1 overflow-y-auto py-2">
-          <div className="px-3 py-1 text-xs font-mono text-vscode-muted uppercase tracking-widest">
+        {/* Toggle between Explorer and Memory */}
+        <div className="flex border-b border-vscode-border">
+          <button
+            onClick={() => setActiveLeftTab('explorer')}
+            className={`flex-1 text-center py-2 text-xs font-mono font-bold uppercase tracking-wider transition-colors ${
+              activeLeftTab === 'explorer' 
+                ? 'text-vscode-primary border-b-2 border-vscode-primary bg-vscode-input/10' 
+                : 'text-vscode-muted hover:text-vscode-text bg-transparent'
+            }`}
+          >
             Explorer
-          </div>
-          
-          {repoTree.length > 0 ? (
-            <div data-testid="file-tree" className="mt-1">
-              {repoTree.map((node, index) => (
-                <TreeNode
-                  key={node.path || index}
-                  node={node}
-                  level={0}
-                  selectedFile={selectedFile}
-                  onSelectFile={handleSelectFile}
-                  expandedFolders={expandedFolders}
-                  onToggleFolder={toggleFolder}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="px-4 py-8 text-center text-vscode-muted text-sm">
-              {typeof GithubLogo !== "undefined" && <GithubLogo size={48} className="mx-auto mb-3 text-vscode-border" />}
-              <p>Enter a GitHub URL to explore</p>
-              <p className="text-xs mt-1">or</p>
-              <button
-                data-testid="try-demo-btn"
-                onClick={loadDemoRepo}
-                className="mt-2 text-vscode-primary hover:text-vscode-secondary transition-colors text-xs underline"
-              >
-                Try Demo Repository
-              </button>
-            </div>
-          )}
+          </button>
+          <button
+            onClick={() => setActiveLeftTab('memory')}
+            className={`flex-1 text-center py-2 text-xs font-mono font-bold uppercase tracking-wider transition-colors ${
+              activeLeftTab === 'memory' 
+                ? 'text-vscode-primary border-b-2 border-vscode-primary bg-vscode-input/10' 
+                : 'text-vscode-muted hover:text-vscode-text bg-transparent'
+            }`}
+          >
+            Memory
+          </button>
         </div>
+
+        {activeLeftTab === 'explorer' ? (
+          /* File Explorer */
+          <div className="flex-1 overflow-y-auto py-2">
+            <div className="px-3 py-1 text-xs font-mono text-vscode-muted uppercase tracking-widest">
+              Explorer
+            </div>
+            
+            {repoTree.length > 0 ? (
+              <div data-testid="file-tree" className="mt-1">
+                {repoTree.map((node, index) => (
+                  <TreeNode
+                    key={node.path || index}
+                    node={node}
+                    level={0}
+                    selectedFile={selectedFile}
+                    onSelectFile={handleSelectFile}
+                    expandedFolders={expandedFolders}
+                    onToggleFolder={toggleFolder}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="px-4 py-8 text-center text-vscode-muted text-sm">
+                {typeof GithubLogo !== "undefined" && <GithubLogo size={48} className="mx-auto mb-3 text-vscode-border" />}
+                <p>Enter a GitHub URL to explore</p>
+                <p className="text-xs mt-1">or</p>
+                <button
+                  data-testid="try-demo-btn"
+                  onClick={loadDemoRepo}
+                  className="mt-2 text-vscode-primary hover:text-vscode-secondary transition-colors text-xs underline"
+                >
+                  Try Demo Repository
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Action History / Memory Panel */
+          <div className="flex-1 overflow-y-auto py-2 flex flex-col min-h-0">
+            <div className="px-3 py-1 text-xs font-mono text-vscode-muted uppercase tracking-widest">
+              Action Memory
+            </div>
+            
+            {/* Search Memory bar */}
+            <div className="px-3 py-2">
+              <input
+                type="text"
+                placeholder="Search past runs..."
+                value={historySearchQuery}
+                onChange={(e) => setHistorySearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearchHistory()}
+                className="w-full bg-vscode-input border border-vscode-border focus:border-vscode-primary text-vscode-text text-xs rounded px-2 py-1 focus:outline-none transition-colors"
+              />
+            </div>
+            
+            {loadingHistory ? (
+              <div className="flex-1 flex items-center justify-center py-12">
+                <Spinner size={24} />
+              </div>
+            ) : historyList.length > 0 ? (
+              <div className="flex-1 overflow-y-auto px-3 space-y-2 pb-4">
+                {historyList.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => restoreHistoryItem(item)}
+                    className="p-3 bg-vscode-input/30 hover:bg-vscode-input/60 border border-vscode-border/50 hover:border-vscode-primary/40 rounded cursor-pointer transition-all duration-200 group text-left"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded ${
+                        item.metadata.type === 'self_heal' 
+                          ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' 
+                          : 'bg-vscode-primary/10 text-vscode-primary border border-vscode-primary/20'
+                      }`}>
+                        {item.metadata.type === 'self_heal' ? 'Self Heal' : 'Explain'}
+                      </span>
+                      <span className="text-[9px] text-vscode-muted font-mono">
+                        {new Date(parseInt(item.metadata.timestamp)).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </span>
+                    </div>
+                    <p className="text-xs text-vscode-text font-semibold line-clamp-2 leading-snug group-hover:text-white transition-colors">
+                      {item.summary}
+                    </p>
+                    <p className="text-[9px] text-vscode-muted font-mono mt-1 truncate">
+                      File: {item.metadata.filename}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="px-4 py-8 text-center text-vscode-muted text-xs italic">
+                No past actions indexed. Runs will appear here automatically!
+              </div>
+            )}
+          </div>
+        )}
       </div>
       
       {/* Center - Code Viewer */}

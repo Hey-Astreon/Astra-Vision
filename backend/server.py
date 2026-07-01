@@ -63,6 +63,10 @@ class SelfHealRequest(BaseModel):
     language: str
 
 
+class SearchHistoryRequest(BaseModel):
+    query: str
+
+
 # Health check
 @app.get("/api/health")
 async def health_check():
@@ -95,6 +99,16 @@ async def self_heal(request: SelfHealRequest):
     
     try:
         data = self_heal_engine.heal(request.code, request.audit_comment, request.language)
+        
+        # Log self-heal action to history collection
+        summary = f"⚡ Self-healed warning in {request.language} block: {request.audit_comment[:60]}"
+        router.indexer.log_history("self_heal", request.language, summary, {
+            "code": request.code,
+            "audit_comment": request.audit_comment,
+            "language": request.language,
+            "results": data
+        })
+        
         return {
             "success": True,
             "data": data
@@ -111,6 +125,15 @@ async def explain_code(request: ExplainCodeRequest):
     
     try:
         data = router.explain_code(request.code, request.filename)
+        
+        # Log explanation action to history collection
+        summary = f"📖 Explained file {request.filename or 'unknown'}"
+        router.indexer.log_history("explanation", request.filename, summary, {
+            "code": request.code,
+            "filename": request.filename,
+            "results": data
+        })
+        
         return {
             "success": True,
             "data": data
@@ -238,6 +261,35 @@ async def github_webhook(
         }
     except Exception as e:
         print(f"Error handling GitHub webhook: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Get action history endpoint
+@app.get("/api/history")
+async def get_history(limit: Optional[int] = 20):
+    try:
+        data = router.indexer.get_history(limit=limit)
+        return {
+            "success": True,
+            "data": data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Search action history endpoint
+@app.post("/api/history/search")
+async def search_history(request: SearchHistoryRequest):
+    if not request.query.strip():
+        raise HTTPException(status_code=400, detail="Search query cannot be empty")
+    
+    try:
+        data = router.indexer.search_history(request.query)
+        return {
+            "success": True,
+            "data": data
+        }
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 

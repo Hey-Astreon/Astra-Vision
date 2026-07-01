@@ -22,6 +22,11 @@ class CodeIndexer:
             name="astra_vision_codebase"
         )
         
+        # Get or create the collection for action history
+        self.history_collection = self.chroma_client.get_or_create_collection(
+            name="astra_vision_history"
+        )
+        
         if self.nvidia_key:
             self.nvidia_client = OpenAI(
                 base_url="https://integrate.api.nvidia.com/v1",
@@ -227,4 +232,89 @@ class CodeIndexer:
             return context_results
         except Exception as e:
             print(f"Error querying semantic code context: {e}")
+            return []
+
+    def log_history(self, action_type: str, filename: str, summary: str, payload: dict) -> str:
+        """
+        Logs an AI action into the ChromaDB history collection.
+        Generates vector embeddings for action summary to support semantic history searching.
+        """
+        import time
+        import json
+        
+        timestamp = str(int(time.time() * 1000))
+        chunk_id = f"hist_{action_type}_{timestamp}_{hashlib.md5(summary.encode('utf-8')).hexdigest()[:8]}"
+        
+        metadata = {
+            "type": action_type,
+            "filename": filename or "",
+            "timestamp": timestamp,
+            "payload": json.dumps(payload)
+        }
+        
+        try:
+            embedding = None
+            if self.nvidia_client:
+                embedding = self.get_embedding(summary, is_query=False)
+                
+            self.history_collection.add(
+                ids=[chunk_id],
+                embeddings=[embedding] if embedding else None,
+                documents=[summary],
+                metadatas=[metadata]
+            )
+            return chunk_id
+        except Exception as e:
+            print(f"Error logging action history: {e}")
+            return ""
+
+    def get_history(self, limit: int = 20) -> list:
+        """
+        Retrieves recent logged actions from the history collection.
+        Sorts items descending by timestamp metadata.
+        """
+        try:
+            res = self.history_collection.get(include=["metadatas", "documents"])
+            history_list = []
+            if res and res["ids"]:
+                for idx in range(len(res["ids"])):
+                    history_list.append({
+                        "id": res["ids"][idx],
+                        "summary": res["documents"][idx],
+                        "metadata": res["metadatas"][idx]
+                    })
+                # Sort descending by timestamp
+                history_list.sort(key=lambda x: int(x["metadata"].get("timestamp", 0)), reverse=True)
+            return history_list[:limit]
+        except Exception as e:
+            print(f"Error retrieving history: {e}")
+            return []
+
+    def search_history(self, query: str, limit: int = 5) -> list:
+        """
+        Runs a similarity search on logged action summaries using embeddings.
+        """
+        if not self.nvidia_client or self.history_collection.count() == 0:
+            # Fallback to simple matching if embeddings are not configured or history is empty
+            history = self.get_history()
+            return [x for x in history if query.lower() in x["summary"].lower()][:limit]
+            
+        try:
+            query_embedding = self.get_embedding(query, is_query=True)
+            results = self.history_collection.query(
+                query_embeddings=[query_embedding],
+                n_results=limit
+            )
+            
+            history_results = []
+            if results and results["documents"]:
+                for idx in range(len(results["documents"][0])):
+                    history_results.append({
+                        "id": results["ids"][0][idx],
+                        "summary": results["documents"][0][idx],
+                        "metadata": results["metadatas"][0][idx]
+                    })
+            return history_results
+        except Exception as e:
+            print(f"Error querying semantic history: {e}")
             return []
