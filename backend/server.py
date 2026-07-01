@@ -1,19 +1,25 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 import os
+import json
 from dotenv import load_dotenv
 from services.hydra_router import HydraRouter
 from services.self_heal_engine import SelfHealEngine
+from services.github_service import GithubService
 
 load_dotenv()
 
 app = FastAPI(title="Astra Vision API", version="1.0.0")
 
-# Initialize Hydra Router & Self Healing Engine
+# Initialize Router, Self Healing, and GitHub Service
 router = HydraRouter()
 self_heal_engine = SelfHealEngine()
+
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET")
+github_service = GithubService(token=GITHUB_TOKEN)
 
 # CORS middleware
 app.add_middleware(
@@ -158,6 +164,80 @@ async def review_pr(request: ReviewPRRequest):
             "data": data
         }
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# GitHub webhook endpoint
+@app.post("/api/github-webhook")
+async def github_webhook(
+    request: Request,
+    x_github_event: Optional[str] = Header(None),
+    x_hub_signature_256: Optional[str] = Header(None)
+):
+    body = await request.body()
+    
+    # 1. Verify HMAC SHA256 webhook signature for security
+    if GITHUB_WEBHOOK_SECRET:
+        if not github_service.verify_signature(body, x_hub_signature_256, GITHUB_WEBHOOK_SECRET):
+            raise HTTPException(status_code=403, detail="Invalid webhook signature")
+    
+    # 2. Parse JSON payload
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+    
+    # 3. Only process pull_request events
+    if x_github_event != "pull_request":
+        return {"status": "ignored", "reason": f"Unsupported event type: {x_github_event}"}
+    
+    action = payload.get("action")
+    # We trigger audits on PR opened or updated (synchronize)
+    if action not in ["opened", "synchronize"]:
+        return {"status": "ignored", "reason": f"Unsupported pull_request action: {action}"}
+    
+    # 4. Extract repository name and PR number
+    repo_name = payload.get("repository", {}).get("full_name")
+    pr_number = payload.get("number")
+    
+    if not repo_name or not pr_number:
+        raise HTTPException(status_code=400, detail="Missing repository name or PR number in payload")
+    
+    try:
+        # 5. Fetch code diff from GitHub
+        diff = github_service.get_pr_diff(repo_name, pr_number)
+        if not diff.strip():
+            return {"status": "ignored", "reason": "Pull request has empty diff"}
+        
+        # 6. Run Nvidia Nemotron PR audit
+        audit_results = router.review_pr(diff, verbosity=2)
+        
+        # 7. Formulate AI review comment
+        review_comment = (
+            "## 🌌 Astra Vision Automated PR Review\n\n"
+            f"I have reviewed the changes in PR #{pr_number} using the Nvidia Nemotron engine. "
+            "Here are my findings:\n\n"
+        )
+        
+        # Check if audit_results is dict or string
+        if isinstance(audit_results, dict) and "review" in audit_results:
+            review_comment += audit_results["review"]
+        elif isinstance(audit_results, str):
+            review_comment += audit_results
+        else:
+            review_comment += str(audit_results)
+            
+        review_comment += "\n\n---\n*Self-hosted with love by Astra Vision Startup Engine 🚀*"
+        
+        # 8. Post comment to the PR issue thread
+        github_service.post_pr_comment(repo_name, pr_number, review_comment)
+        
+        return {
+            "status": "success",
+            "message": f"Review comment posted successfully to {repo_name} PR #{pr_number}"
+        }
+    except Exception as e:
+        print(f"Error handling GitHub webhook: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
