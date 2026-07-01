@@ -1052,14 +1052,14 @@ function App() {
   }, [editorRef.current]);
   
   return (
-    <div className="h-screen flex overflow-hidden bg-vscode-bg text-vscode-text font-sans">
+    <div className="h-screen flex overflow-hidden bg-[#07080d] text-vscode-text font-sans bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-950/20 via-[#07080d] to-[#07080d]">
       {/* Left Sidebar - File Explorer */}
-      <div className="w-72 flex-shrink-0 border-r border-vscode-border bg-vscode-sidebar flex flex-col">
+      <div className="w-72 flex-shrink-0 border-r border-vscode-border bg-vscode-sidebar/95 glass-panel-heavy flex flex-col">
         {/* Header */}
         <div className="p-3 border-b border-vscode-border">
-          <div className="flex items-center gap-2 mb-3">
-            {typeof Graph !== "undefined" && <Graph size={24} weight="bold" className="text-vscode-primary" />}
-            <h1 className="text-white font-mono font-bold text-lg">Astra Vision</h1>
+          <div className="flex items-center gap-2.5 mb-3">
+            <img src="/logo.png" alt="Astra Vision Logo" className="w-6 h-6 object-contain rounded-md" />
+            <h1 className="text-white font-sans font-bold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-indigo-300">Astra Vision</h1>
           </div>
           
           {/* GitHub URL Input */}
@@ -1145,13 +1145,13 @@ function App() {
           )}
         </div>
         
-        {/* Toggle between Explorer and Memory */}
-        <div className="flex border-b border-vscode-border">
+        {/* Toggle between Explorer and Memory (Pill Toggles) */}
+        <div className="p-2 border-b border-vscode-border/60 bg-vscode-sidebar/30 flex gap-1">
           <button
             onClick={() => setActiveLeftTab('explorer')}
-            className={`flex-1 text-center py-2 text-xs font-mono font-bold uppercase tracking-wider transition-colors ${
+            className={`flex-1 text-center py-1.5 text-[10px] font-sans font-bold uppercase tracking-wider rounded-md transition-all duration-200 ${
               activeLeftTab === 'explorer' 
-                ? 'text-vscode-primary border-b-2 border-vscode-primary bg-vscode-input/10' 
+                ? 'text-white bg-vscode-primary glow-accent font-extrabold' 
                 : 'text-vscode-muted hover:text-vscode-text bg-transparent'
             }`}
           >
@@ -1159,9 +1159,9 @@ function App() {
           </button>
           <button
             onClick={() => setActiveLeftTab('memory')}
-            className={`flex-1 text-center py-2 text-xs font-mono font-bold uppercase tracking-wider transition-colors ${
+            className={`flex-1 text-center py-1.5 text-[10px] font-sans font-bold uppercase tracking-wider rounded-md transition-all duration-200 ${
               activeLeftTab === 'memory' 
-                ? 'text-vscode-primary border-b-2 border-vscode-primary bg-vscode-input/10' 
+                ? 'text-white bg-vscode-primary glow-accent font-extrabold' 
                 : 'text-vscode-muted hover:text-vscode-text bg-transparent'
             }`}
           >
@@ -1341,7 +1341,7 @@ function App() {
       </div>
       
       {/* Right Sidebar - AI Panel */}
-      <div className="w-96 flex-shrink-0 border-l border-vscode-border bg-vscode-sidebar flex flex-col overflow-hidden">
+      <div className="w-96 flex-shrink-0 border-l border-vscode-border bg-vscode-sidebar/95 glass-panel flex flex-col overflow-hidden">
         <div className="p-3 border-b border-vscode-border">
           <h2 className="text-xs font-mono text-vscode-muted uppercase tracking-widest">AI Analysis</h2>
         </div>
