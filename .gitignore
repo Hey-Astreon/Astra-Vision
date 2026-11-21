@@ -6,3 +6,9 @@ build/
 
 backend/db/
 __pycache__/
+.venv/
+test_models.py
+test_console_heal.py
+scripts/browser_audit.mjs
+scripts/browser_audit.cjs
+

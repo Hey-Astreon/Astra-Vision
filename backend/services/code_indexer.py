@@ -40,20 +40,38 @@ class CodeIndexer:
 
     def get_embedding(self, text: str, is_query: bool = False) -> list:
         """
-        Generates embedding using Nvidia's nv-embedcode-7b model.
-        is_query=True sets input_type to 'query', otherwise 'passage' for database storage.
+        Generates embedding using active embedding models.
+        Primary: Gemini models/gemini-embedding-001 (active, reliable 3072-dim embeddings).
+        Fallback/Alternative: Nvidia embedding client if configured.
         """
-        if not self.nvidia_client:
-            raise ValueError("NVIDIA_API_KEY is not configured.")
-        
-        input_type = "query" if is_query else "passage"
-        
-        response = self.nvidia_client.embeddings.create(
-            input=[text],
-            model="nvidia/nv-embedcode-7b-v1",
-            extra_body={"input_type": input_type}
-        )
-        return response.data[0].embedding
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        if gemini_key:
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=gemini_key)
+                task_type = "RETRIEVAL_QUERY" if is_query else "RETRIEVAL_DOCUMENT"
+                res = genai.embed_content(
+                    model="models/gemini-embedding-001",
+                    content=text,
+                    task_type=task_type
+                )
+                return res["embedding"]
+            except Exception as e:
+                print(f"Gemini get_embedding notice: {e}")
+
+        if self.nvidia_client:
+            try:
+                input_type = "query" if is_query else "passage"
+                response = self.nvidia_client.embeddings.create(
+                    input=[text],
+                    model="nvidia/nv-embedcode-7b-v1",
+                    extra_body={"input_type": input_type}
+                )
+                return response.data[0].embedding
+            except Exception as e:
+                print(f"Nvidia get_embedding failed: {e}")
+
+        raise ValueError("No active embedding model available.")
 
     def chunk_file(self, filename: str, content: str, indexed_files: set = None) -> list:
         """
@@ -186,7 +204,7 @@ class CodeIndexer:
             documents.append(chunk["text"])
             metadatas.append(chunk["metadata"])
             
-            if self.nvidia_client:
+            if self.nvidia_client or os.getenv("GEMINI_API_KEY"):
                 try:
                     embeddings.append(self.get_embedding(chunk["text"], is_query=False))
                 except Exception as e:
@@ -194,12 +212,31 @@ class CodeIndexer:
                     continue
             
         if embeddings:
-            self.collection.add(
-                ids=ids[:len(embeddings)],
-                embeddings=embeddings,
-                documents=documents[:len(embeddings)],
-                metadatas=metadatas[:len(embeddings)]
-            )
+            try:
+                self.collection.add(
+                    ids=ids[:len(embeddings)],
+                    embeddings=embeddings,
+                    documents=documents[:len(embeddings)],
+                    metadatas=metadatas[:len(embeddings)]
+                )
+            except Exception as e:
+                if "dimension" in str(e).lower():
+                    print(f"ChromaDB dimension mismatch detected ({e}). Resetting collection...")
+                    try:
+                        self.chroma_client.delete_collection(name="astra_vision_codebase")
+                    except Exception:
+                        pass
+                    self.collection = self.chroma_client.get_or_create_collection(
+                        name="astra_vision_codebase"
+                    )
+                    self.collection.add(
+                        ids=ids[:len(embeddings)],
+                        embeddings=embeddings,
+                        documents=documents[:len(embeddings)],
+                        metadatas=metadatas[:len(embeddings)]
+                    )
+                else:
+                    raise e
             
         return {
             "success": True, 
@@ -212,7 +249,7 @@ class CodeIndexer:
         """
         Searches the codebase for chunks related to a semantic query or error message.
         """
-        if not self.nvidia_client or self.collection.count() == 0:
+        if self.collection.count() == 0:
             return []
             
         try:
@@ -231,6 +268,14 @@ class CodeIndexer:
                     })
             return context_results
         except Exception as e:
+            if "dimension" in str(e).lower():
+                print(f"Dimension mismatch in search_context ({e}). Resetting collection...")
+                try:
+                    self.chroma_client.delete_collection(name="astra_vision_codebase")
+                except Exception:
+                    pass
+                self.collection = self.chroma_client.get_or_create_collection(name="astra_vision_codebase")
+                return []
             print(f"Error querying semantic code context: {e}")
             return []
 

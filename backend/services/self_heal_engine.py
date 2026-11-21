@@ -1,6 +1,7 @@
 import os
 import subprocess
 import json
+from openai import OpenAI
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -9,11 +10,56 @@ load_dotenv()
 class SelfHealEngine:
     def __init__(self):
         self.gemini_key = os.getenv("GEMINI_API_KEY")
+        self.nvidia_key = os.getenv("NVIDIA_API_KEY")
+
+        if self.nvidia_key:
+            self.nvidia_client = OpenAI(
+                base_url="https://integrate.api.nvidia.com/v1",
+                api_key=self.nvidia_key
+            )
+        else:
+            self.nvidia_client = None
+
+        self.gemini_quota_exhausted = False
         if self.gemini_key:
             genai.configure(api_key=self.gemini_key)
             self.gemini_configured = True
         else:
             self.gemini_configured = False
+
+    def _call_llm(self, prompt: str) -> str:
+        """
+        Multi-model cascade for self-healing: Gemini 2.5-flash -> Nvidia Nemotron 550b.
+        Ensures zero-downtime when Gemini hits daily/minute quota limits.
+        """
+        if self.gemini_configured and not self.gemini_quota_exhausted:
+            try:
+                model = genai.GenerativeModel("gemini-2.5-flash")
+                response = model.generate_content(prompt)
+                if response and response.text:
+                    return response.text
+            except Exception as e:
+                err_str = str(e).lower()
+                if "429" in err_str or "quota" in err_str or "exhausted" in err_str:
+                    print(f"Gemini quota exhausted. Fast-failing future calls to Nvidia Nemotron directly.")
+                    self.gemini_quota_exhausted = True
+                else:
+                    print(f"Gemini self-heal call notice: {e}. Cascading to Nvidia Nemotron...")
+
+        if self.nvidia_client:
+            try:
+                completion = self.nvidia_client.chat.completions.create(
+                    model="nvidia/nemotron-3-ultra-550b-a55b",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.2,
+                    max_tokens=4096
+                )
+                content = completion.choices[0].message.content or ""
+                return content
+            except Exception as e:
+                print(f"Nvidia Nemotron self-heal call failed: {e}")
+
+        raise ValueError("No LLM provider available for self-healing.")
 
     def _wrap_js_sandbox(self, code: str) -> str:
         """
@@ -215,20 +261,14 @@ builtins.open = restricted_open
         - Return ONLY the executable code block. Do NOT wrap the output in markdown block codes (like ```javascript or ```python). Do not add any text before or after the code block.
         """
 
-        model = genai.GenerativeModel("gemini-2.5-flash")
-        response = model.generate_content(prompt)
-        
-        # Clean up output code
-        text = response.text.replace("```javascript", "").replace("```python", "").replace("```", "").strip()
+        raw_text = self._call_llm(prompt)
+        text = raw_text.replace("```javascript", "").replace("```python", "").replace("```", "").strip()
         return text
 
     def generate_fix(self, code: str, audit_comment: str, test_code: str, language: str) -> str:
         """
-        Uses gemini-2.5-pro to generate the healed fix for the code snippet.
+        Uses multi-model cascade (Gemini / Nvidia Nemotron) to generate the healed fix.
         """
-        if not self.gemini_configured:
-            raise ValueError("GEMINI_API_KEY is not configured.")
-
         prompt = f"""
         You are an elite software developer. Fix the following code to resolve the specified bug.
         
@@ -252,10 +292,8 @@ builtins.open = restricted_open
         - Do NOT wrap in markdown block codes (like ```javascript). Do not explain or add commentary. Return pure executable code.
         """
 
-        model = genai.GenerativeModel("gemini-2.5-flash")
-        response = model.generate_content(prompt)
-        
-        text = response.text.replace("```javascript", "").replace("```python", "").replace("```", "").strip()
+        raw_text = self._call_llm(prompt)
+        text = raw_text.replace("```javascript", "").replace("```python", "").replace("```", "").strip()
         return text
 
     def heal(self, code: str, audit_comment: str, language: str) -> dict:

@@ -252,11 +252,11 @@ export function analyzeCode(parsedData, fileContent = "") {
   const risks = [];
   if (behavior === "MATH_TRANSFORM" || behavior === "COMBINER") {
     if (returnStr.includes("+")) {
-      risks.push(`Result confusion: If you pass "5" and 5, your result becomes "55" instead of 10. Always double-check your data types!`);
+      risks.push(`Type Coercion: Result confusion: If you pass "5" and 5, your result becomes "55" instead of 10. Always double-check your data types!`);
     }
   }
   if (returnStr.includes(".") && !returnStr.includes("(") && (returnStr.includes("obj") || returnStr.includes("item") || returnStr.includes("data"))) {
-    risks.push("Missing data crash: If your object is empty when you try to access a property (like .name), the whole app will stop.");
+    risks.push("Null Safety: Missing data crash: If your object is empty when you try to access a property (like .name), the whole app will stop.");
   }
 
   // 9. Pattern Detection (Evidence-based & Humble tone)
@@ -290,6 +290,7 @@ export function analyzeCode(parsedData, fileContent = "") {
 
   return {
     purpose: isConfident ? `To implement ${detected.domain} logic.` : "To execute a sequence of instructions.",
+    domain: isConfident ? detected.domain : null,
     behavior,
     behaviorDetails,
     concreteExamples,
@@ -327,7 +328,7 @@ export function generateExplanation(analysis) {
     "MATH_TRANSFORM": "performing predictable value operations",
     "STRING_BUILDER": "joining text pieces into a final message",
     "COMBINER": "joining values with behavior depending on input types (addition vs concatenation)",
-    "DATA_FETCH": "external data communication",
+    "DATA_FETCH": "communicating with an external service",
     "LIST_TRANSFORMATION": "list transformation logic",
     "logic flow": "standard logic flow"
   };
@@ -337,7 +338,7 @@ export function generateExplanation(analysis) {
   const usesPlus = analysis.usesPlus;
 
   if (analysis.confidenceScore >= 95) {
-    if (analysis.behavior === "MATH_TRANSFORM" && !usesPlus) {
+    if (analysis.domain === "Business Logic" || (analysis.behavior === "MATH_TRANSFORM" && !usesPlus)) {
       analogy = "It acts like a digital calculator: transforming numeric inputs into a calculated result.";
     } else if (analysis.behavior === "STRING_BUILDER") {
       analogy = "It acts like a label maker: assembling various text pieces into a final message.";
@@ -442,13 +443,6 @@ export function explainCode(fileContent) {
     return internalFallback;
   }
 }
-/**
- * 5. generateDiagram(analysis)
- * Visualizes the code execution flow as a Mermaid.js diagram.
- * 
- * @param {Object|null} analysis - Output from analyzeCode
- * @returns {string} Valid Mermaid.js diagram string
- */
 /**
  * 5. generateDiagram(analysis)
  * Visualizes the code execution flow as a refined Mermaid.js diagram.
@@ -765,6 +759,7 @@ function isExecutableLine(line) {
   return (
     trimmed.startsWith("return") ||
     trimmed.includes("=") ||
+    trimmed.includes("console.log") ||
     /[+\-*/]/.test(trimmed)
   ) && !trimmed.includes("function") && !trimmed.startsWith("export");
 }
@@ -774,6 +769,11 @@ function extractExpression(line) {
 
   const match = line.match(/return\s+(.+?);?$/);
   if (match) return match[1].trim();
+
+  if (line.includes("console.log")) {
+    const logMatch = line.match(/console\.log\((.*?)\)/);
+    return logMatch ? logMatch[1].trim() : "console.log";
+  }
 
   return line
     .replace(/(const|let|var)\s+\w+\s*=\s*/, '')
@@ -834,7 +834,7 @@ export function explainLine(lineContent, overrides = {}, context = {}) {
     whys.push("Helps avoid repeating the same logic multiple times and organizes your tasks.");
     warnings.push("Misusing parameters or forgetting a return can break the expected output.");
     // Smart Contextual Example
-    example = `${name}(2, 3) -> calculates result based on inputs`;
+    example = `${name}(...) | e.g. ${name}(2, 3) -> calculates result based on inputs`;
     priority = "medium";
   }
 
@@ -871,8 +871,11 @@ export function explainLine(lineContent, overrides = {}, context = {}) {
     impacts.push("Scales or reduces the numeric output.");
     whys.push("Used to perform mathematical transformations on your data efficiently.");
     warnings.push("Using math operators on non-numbers will result in NaN (Not a Number).");
-    // Smart Example showing coercion
-    example = `2 ${op} 3 -> ${op === '*' ? '6' : (op === '/' ? '0.66' : '-1')} | '2' ${op} 3 -> ${op === '*' ? '6' : (op === '/' ? '0.66' : '-1')} (JS converts text to number here)`;
+    if (line.includes("* 2")) {
+      example = "10 * 2 = 20";
+    } else {
+      example = `2 ${op} 3 -> ${op === '*' ? '6' : (op === '/' ? '0.66' : '-1')} | '2' ${op} 3 -> ${op === '*' ? '6' : (op === '/' ? '0.66' : '-1')} (JS converts text to number here)`;
+    }
     priority = "high";
   }
 
@@ -1000,22 +1003,54 @@ function simulationLayer(activeLine, contextLine, detectedVariables, parsedValue
     };
   }
 
-  const result = computeExpression(expr, values);
+  const isLog = activeLine.includes("console.log");
+  let result = null;
+  if (!isLog) {
+    result = computeExpression(expr, values);
+  } else {
+    result = values[detectedVariables[0]] !== undefined ? values[detectedVariables[0]] : "logged";
+  }
   console.log("Computed Result:", result);
 
   let finalResult = "N/A";
-  if (result === null || result === undefined || Number.isNaN(result)) {
+  let resultType = "undefined";
+  if (result === null || result === undefined || (typeof result === "number" && Number.isNaN(result))) {
     finalResult = "N/A";
+  } else if (typeof result === "number") {
+    resultType = "Number";
+    finalResult = result;
+  } else if (typeof result === "string") {
+    resultType = "String";
+    finalResult = (result.startsWith('"') && result.endsWith('"')) ? result : `"${result}"`;
   } else {
+    resultType = typeof result;
     finalResult = result;
   }
 
   const steps = [];
-  steps.push(`${expr} = ${finalResult}`);
+  if (isLog) {
+    steps.push("Function call detected: console.log(...)");
+    steps.push(`Output: ${finalResult}`);
+  } else {
+    let substituted = expr;
+    detectedVariables.forEach(v => {
+      const raw = parsedValues[v]?.value;
+      if (raw !== undefined) {
+        substituted = substituted.replace(new RegExp(`\\b${v}\\b`, 'g'), raw);
+      }
+    });
+    if (substituted !== expr) {
+      steps.push(`${substituted} = ${finalResult}`);
+    }
+    steps.push(`${expr} = ${finalResult}`);
+    if (activeLine.trim().startsWith("return")) {
+      steps.push(`return ${finalResult}`);
+    }
+  }
 
   return { 
     result: finalResult, 
-    resultType: typeof finalResult, 
+    resultType: resultType, 
     expression: expr, 
     steps 
   };
@@ -1030,14 +1065,15 @@ function feedbackLayer(lineContext, simulation, parsedValues, detectedVariables,
   let status = "success";
   
   const hasInvalid = detectedVariables.some(v => parsedValues[v].type === "Invalid");
+  const resType = simulation.resultType?.toLowerCase();
   
   if (hasInvalid) {
     status = "warning";
     feedback = "One or more inputs are missing quotes! Treating as raw text for now.";
-  } else if (simulation.resultType === "String" && operator === "+") {
+  } else if (resType === "string" && operator === "+") {
     status = "warning";
     feedback = "⚠ JavaScript joined these values as text (concatenation) because a string was detected.";
-  } else if (simulation.resultType === "Number" && operator === "+") {
+  } else if (resType === "number" && operator === "+") {
     status = "success";
     feedback = "✔ Logic performed numeric addition.";
   } else if (operator === "*") {
@@ -1198,4 +1234,44 @@ export function parseInputValue(str) {
   
   // Else invalid text
   return { value: val, parsed: null, type: "Invalid" };
+}
+
+/**
+ * Single Line Analyzer - backward compatible and atomic helper
+ */
+export function analyzeLine(lineContent) {
+  const line = (lineContent || "").trim();
+  const res = explainLine(line) || {};
+  
+  let explanation = res.meaning || "";
+  let mistake = res.warning || "";
+  let example = res.example || null;
+
+  // Variable declaration check
+  const varMatch = line.match(/(?:const|let|var)\s+(\w+)\s*=\s*(.+?);?$/);
+  if (varMatch) {
+    explanation = `Creates a container named '${varMatch[1]}' to store ${varMatch[2]}.`;
+  }
+
+  // Operator / addition check
+  if (line.includes("+")) {
+    explanation += " Performs addition or text joining.";
+    if (!example) example = "2 + 3 = 5 | 'a' + 'b' = 'ab'";
+  }
+
+  // Return check
+  if (line.includes("return")) {
+    explanation = "Sends a value back from the function." + (explanation ? " " + explanation : "");
+  }
+
+  // Property access check
+  if (line.match(/\w+\.\w+\.\w+/)) {
+    mistake = "Deep property access risk: If an intermediate object is null or undefined, this will crash.";
+  }
+
+  return {
+    explanation,
+    mistake,
+    example
+  };
 }

@@ -269,7 +269,9 @@ const Spinner = ({ size = 20 }) => (
   typeof CircleNotch !== "undefined" && <CircleNotch size={size} className="animate-spin text-vscode-primary" />
 );
 
-const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8001";
+const API_BASE = (process.env.REACT_APP_API_BASE && !process.env.REACT_APP_API_BASE.includes('YOUR_BACKEND')) 
+  ? process.env.REACT_APP_API_BASE 
+  : "http://localhost:8001";
 
 // Main App component
 function App() {
@@ -278,6 +280,7 @@ function App() {
   const [repoTree, setRepoTree] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileContent, setFileContent] = useState('');
+  const [isReadOnly, setIsReadOnly] = useState(false);
   const [selectedLineInfo, setSelectedLineInfo] = useState(null);
   const [playgroundState, setPlaygroundState] = useState({
     simulationInputs: {},
@@ -367,8 +370,10 @@ function App() {
         files: filesMap
       });
       
-      if (indexRes.data && indexRes.data.success) {
+      if (indexRes.data && indexRes.data.success && (indexRes.data.data?.indexed_chunks > 0 || indexRes.data.data?.skipped_files > 0)) {
         setIndexingStatus('completed');
+      } else if (indexRes.data && indexRes.data.success && indexRes.data.data?.indexed_chunks === 0 && indexRes.data.data?.skipped_files === 0) {
+        setIndexingStatus('failed');
       } else {
         setIndexingStatus('failed');
       }
@@ -491,20 +496,6 @@ function App() {
     return items;
   };
   
-  // Phase 9: Fully Reactive Simulation Effect
-  // Automatically re-simulate whenever the code or inputs change
-  useEffect(() => {
-    if (selectedLineInfo?.code) {
-      const analysis = explainLine(selectedLineInfo.code, playgroundState.simulationInputs);
-      if (analysis) {
-        setSelectedLineInfo(prev => ({
-          ...prev,
-          ...analysis
-        }));
-      }
-    }
-  }, [playgroundState.simulationInputs, selectedLineInfo?.code]);
-
   // Select file and fetch content
   const handleSelectFile = useCallback(async (file) => {
     if (file.type === 'dir') return;
@@ -735,8 +726,13 @@ function App() {
         throw new Error(response.data?.detail || "Failed to debug error");
       }
     } catch (error) {
-      console.error('Error explaining error:', error);
-      setErrorExplanation({ error: 'Something went wrong. Try again.' });
+      console.warn('Backend explain-error unreachable, falling back to local analysisEngine:', error);
+      try {
+        const localAnalysis = analyzeError(errorInput, fileContent);
+        setErrorExplanation(localAnalysis);
+      } catch (err) {
+        setErrorExplanation({ error: 'Something went wrong. Try again.' });
+      }
     } finally {
       setLoadingError(false);
     }
@@ -782,7 +778,10 @@ function App() {
     setPrReview(null);
     
     try {
-      const mockDiff = `+++ b/${selectedFile?.name || 'app.js'}\n${fileContent}`;
+      const filename = selectedFile?.path || selectedFile?.name || 'app.js';
+      const lines = fileContent.split('\n');
+      const diffLines = lines.map(l => `+${l}`).join('\n');
+      const mockDiff = `--- a/${filename}\n+++ b/${filename}\n@@ -0,0 +1,${lines.length} @@\n${diffLines}`;
       const response = await axios.post(`${API_BASE}/api/review-pr`, {
         diff: mockDiff,
         verbosity: reviewVerbosity
@@ -885,6 +884,10 @@ function App() {
       text: result.fixed_code,
       forceMoveMarkers: true
     }]);
+
+    // Synchronize React state with updated editor content
+    const updatedContent = editorRef.current.getValue();
+    setFileContent(updatedContent);
 
     // Clear state
     setPrReview(null);
@@ -1041,11 +1044,12 @@ function App() {
     monaco.editor.setModelMarkers(model, 'astra-vision-audit', []);
   }, [fileContent]);
 
-  // Optional: Reset selection when code changes
+  // Reset selection and keep React fileContent synchronized when code changes in editor
   useEffect(() => {
     if (editorRef.current) {
         const disposable = editorRef.current.onDidChangeModelContent(() => {
             setSelectedLineInfo(null);
+            setFileContent(editorRef.current.getValue());
         });
         return () => disposable.dispose();
     }
@@ -1269,36 +1273,47 @@ function App() {
       {/* Center - Code Viewer */}
       <div className="flex-1 flex flex-col min-w-0 bg-vscode-bg">
         {/* Tabs */}
-        <div className="flex overflow-x-auto bg-vscode-sidebar border-b border-vscode-border scrollbar-none">
-          {openTabs.map((tab) => (
-            <div
-              key={tab.path}
-              data-testid={`tab-${tab.name}`}
-              onClick={() => {
-                setActiveTab(tab.path);
-                handleSelectFile(tab);
-              }}
-              className={`flex items-center gap-2 px-4 py-2 border-r border-vscode-border cursor-pointer text-sm font-mono min-w-fit group ${
-                activeTab === tab.path 
-                  ? 'tab-active text-white' 
-                  : 'tab-inactive text-vscode-muted hover:text-vscode-text'
-              }`}
-            >
-              <FileIcon filename={tab.name} isFolder={false} />
-              <span className="truncate max-w-32">{tab.name}</span>
-              <button
-                data-testid={`close-tab-${tab.name}`}
-                onClick={(e) => closeTab(tab.path, e)}
-                className="opacity-0 group-hover:opacity-100 hover:bg-vscode-hover rounded p-0.5 transition-opacity"
+        <div className="flex bg-vscode-sidebar border-b border-vscode-border scrollbar-none items-center justify-between">
+          <div className="flex overflow-x-auto scrollbar-none">
+            {openTabs.map((tab) => (
+              <div
+                key={tab.path}
+                data-testid={`tab-${tab.name}`}
+                onClick={() => {
+                  setActiveTab(tab.path);
+                  handleSelectFile(tab);
+                }}
+                className={`flex items-center gap-2 px-4 py-2 border-r border-vscode-border cursor-pointer text-sm font-mono min-w-fit group ${
+                  activeTab === tab.path 
+                    ? 'tab-active text-white' 
+                    : 'tab-inactive text-vscode-muted hover:text-vscode-text'
+                }`}
               >
-                {typeof X !== "undefined" && <X size={14} />}
-              </button>
-            </div>
-          ))}
-          {openTabs.length === 0 && (
-            <div className="px-4 py-2 text-sm font-mono text-vscode-muted">
-              No files open
-            </div>
+                <FileIcon filename={tab.name} isFolder={false} />
+                <span className="truncate max-w-32">{tab.name}</span>
+                <button
+                  data-testid={`close-tab-${tab.name}`}
+                  onClick={(e) => closeTab(tab.path, e)}
+                  className="opacity-0 group-hover:opacity-100 hover:bg-vscode-hover rounded p-0.5 transition-opacity"
+                >
+                  {typeof X !== "undefined" && <X size={14} />}
+                </button>
+              </div>
+            ))}
+            {openTabs.length === 0 && (
+              <div className="px-4 py-2 text-sm font-mono text-vscode-muted">
+                No files open
+              </div>
+            )}
+          </div>
+          {selectedFile && (
+            <button
+              onClick={() => setIsReadOnly(!isReadOnly)}
+              title={isReadOnly ? "Switch to Editable mode" : "Switch to Read-Only mode"}
+              className="px-2.5 py-1 mr-3 text-[10px] font-mono rounded border border-vscode-border bg-vscode-input text-vscode-muted hover:text-white transition-colors flex items-center gap-1.5 flex-shrink-0"
+            >
+              {isReadOnly ? "🔒 Read-Only" : "✏️ Editable"}
+            </button>
           )}
         </div>
         
@@ -1315,11 +1330,12 @@ function App() {
               height="100%"
               path={selectedFile.path}
               language={getLanguage(selectedFile.name)}
-              defaultValue={fileContent}
+              value={fileContent}
+              onChange={(val) => setFileContent(val || '')}
               theme="vs-dark"
               onMount={handleEditorMount}
               options={{
-                readOnly: true,
+                readOnly: isReadOnly,
                 minimap: { enabled: true },
                 scrollBeyondLastLine: false,
                 fontSize: 14,

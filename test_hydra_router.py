@@ -1,4 +1,5 @@
 import sys
+sys.path.insert(0, 'backend')
 from backend.services.hydra_router import HydraRouter
 
 def test_router():
