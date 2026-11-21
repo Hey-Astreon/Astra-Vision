@@ -67,6 +67,17 @@ class SearchHistoryRequest(BaseModel):
     query: str
 
 
+# Root status endpoint
+@app.get("/")
+async def root():
+    return {
+        "status": "online",
+        "service": "Astra Vision API",
+        "version": "1.0.0",
+        "docs": "/docs"
+    }
+
+
 # Health check
 @app.get("/api/health")
 async def health_check():
