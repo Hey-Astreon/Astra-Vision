@@ -32,6 +32,7 @@ import {
 } from '@phosphor-icons/react';
 import './App.css';
 import { explainCode, parseCode, analyzeCode, generateDiagram, explainLine, analyzeError } from './utils/analysisEngine';
+import { AstraVisionLogo } from './components/brand/AstraVisionLogo';
 
 // Local Mock AI Logic
 
@@ -1061,9 +1062,19 @@ function App() {
       <div className="w-72 flex-shrink-0 border-r border-vscode-border bg-vscode-sidebar/95 glass-panel-heavy flex flex-col">
         {/* Header */}
         <div className="p-3 border-b border-vscode-border">
-          <div className="flex items-center gap-2.5 mb-3">
-            <img src="/logo.png" alt="Astra Vision Logo" className="w-6 h-6 object-contain rounded-md" />
-            <h1 className="text-white font-sans font-bold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-indigo-300">Astra Vision</h1>
+          <div className="flex items-center justify-between mb-3 px-0.5">
+            <div className="flex items-center gap-2.5">
+              <div className="relative flex items-center justify-center p-1.5 rounded-lg bg-[#0B0C12] border border-indigo-500/25 shadow-[0_0_15px_rgba(79,70,229,0.25)] transition-all hover:border-indigo-500/40">
+                <AstraVisionLogo iconOnly height={22} glow />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-white font-sans font-bold text-base tracking-tight leading-none flex items-center gap-1">
+                  Astra <span className="text-indigo-400 font-semibold">Vision</span>
+                </span>
+                <span className="text-[9px] font-mono tracking-widest uppercase text-vscode-muted mt-0.5">AI DEV BRAIN</span>
+              </div>
+            </div>
+            <span className="px-1.5 py-0.5 rounded-[3px] bg-indigo-500/10 text-indigo-400 text-[8px] font-mono font-bold border border-indigo-500/25 tracking-wider">v1.0</span>
           </div>
           
           {/* GitHub URL Input */}
@@ -1347,10 +1358,12 @@ function App() {
               }}
             />
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-vscode-muted h-full">
-              {typeof FileCode !== "undefined" && <FileCode size={64} className="mb-4 text-vscode-border" />}
-              <p className="text-lg">Select a file to view</p>
-              <p className="text-sm mt-1">Use the explorer on the left</p>
+            <div className="flex-1 flex flex-col items-center justify-center text-vscode-muted h-full select-none">
+              <div className="relative mb-5 flex items-center justify-center p-4 rounded-2xl bg-[#0B0C12] border border-indigo-500/20 shadow-[0_0_30px_rgba(79,70,229,0.15)]">
+                <AstraVisionLogo iconOnly height={56} glow />
+              </div>
+              <p className="text-base font-semibold text-white/90 tracking-tight">Select a file to begin code analysis</p>
+              <p className="text-xs text-vscode-muted mt-1 font-mono">AST Graphing • PR Audit • Self-Healing Sandbox</p>
             </div>
           )}
         </div>

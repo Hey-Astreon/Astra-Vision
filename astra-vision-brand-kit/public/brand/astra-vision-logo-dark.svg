@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 490 100" width="314" height="64" fill="none">
+  <polygon points="39.0,0.0 63.2,46.0 47.8,46.0 39.0,29.2 15.0,76.0 0.0,76.0" fill="#FFFFFF"/>
+  <polygon points="22.0,76.0 34.0,52.6 46.0,76.0" fill="#FFFFFF"/>
+  <polygon points="61.0,100.0 36.8,54.0 52.2,54.0 61.0,70.8 85.0,24.0 100.0,24.0" fill="#4F46E5"/>
+  <polygon points="78.0,24.0 66.0,47.4 54.0,24.0" fill="#4F46E5"/>
+  <text x="122" y="70" font-family="Inter, 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="56" font-weight="600" letter-spacing="-0.025em" fill="#FFFFFF">Astra Vision</text>
+</svg>
