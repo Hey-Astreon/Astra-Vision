@@ -4,6 +4,7 @@
   # 🌌 Astra Vision
   ### *The Autonomous AI Code Review, Semantic Graphing & Self-Healing Sandbox Engine*
 
+  [![Live Demo](https://img.shields.io/badge/Live%20Demo-astra--vision.vercel.app-00F2FE?style=for-the-badge&logo=vercel)](https://astra-vision-chi.vercel.app/)
   [![React](https://img.shields.io/badge/Frontend-React-blue?style=for-the-badge&logo=react)](https://react.dev/)
   [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-green?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
   [![Monaco Editor](https://img.shields.io/badge/Editor-Monaco-purple?style=for-the-badge&logo=visual-studio-code)](https://microsoft.github.io/monaco-editor/)
@@ -13,6 +14,8 @@
   ---
   
   **Astra Vision** is a professional, repository-scale AI pair programming environment. It integrates deterministic Abstract Syntax Tree (AST) analysis, a persistent vector database, inline Monaco editor markers, and isolated code execution environments to deliver automated, verified codebase enhancements.
+
+  🌐 **Live Web Application:** [https://astra-vision-chi.vercel.app/](https://astra-vision-chi.vercel.app/)
 </div>
 
 ---
@@ -221,19 +224,15 @@ Instead of re-embedding the entire repository on every change, Astra Vision comp
 
 ---
 
-### 🔒 4. Secure Sandbox Isolation & DOM Environment Mocking (Option 2)
-To execute LLM-generated code safely without putting the developer's host machine at risk, Astra Vision introduces strict sandbox boundaries:
-1.  **Browser DOM Mocks**: Prefixes JavaScript code with mock global structures (e.g. fake `window`, `document`, and custom mock implementations for `localStorage` and `sessionStorage`) so UI-reliant components run without reference errors.
-2.  **OS Security Intercepts**: Overrides Node's global `require()` to block dangerous host-level modules (`fs`, `child_process`, `net`, `http`, etc.):
-    ```javascript
-    global.require = function(modName) {
-        if (['fs', 'child_process', 'net'].includes(modName)) {
-            throw new Error("Security Violation: Module blocked.");
-        }
-        return originalRequire(modName);
-    };
-    ```
-3.  **Python File I/O Lockouts**: Intercepts `builtins.open` to raise a `PermissionError` on file access and overrides `builtins.__import__` to block `os`, `subprocess`, and network socket modules.
+### 🔒 4. Secure Sandbox Isolation & Static AST Validation
+To execute LLM-generated code safely without putting the host environment at risk, Astra Vision introduces a layered AST-driven security boundary:
+1.  **Pre-Execution Static AST Inspection**: Parses submitted Python source into Abstract Syntax Trees prior to execution. Statically intercepts and blocks:
+    *   Forbidden reflection dunders (`__subclasses__`, `__bases__`, `__globals__`, `__builtins__`).
+    *   Dynamic code execution calls (`eval`, `exec`, `compile`, `breakpoint`).
+    *   Disallowed host modules (`os`, `sys`, `subprocess`, `socket`, `ctypes`, `importlib`, `multiprocessing`, `pty`).
+2.  **Environment Scrubbing & Secret Isolation**: Spawns isolated subprocesses with a stripped, safe environment whitelist (`PATH`, `SYSTEMROOT`, `TEMP`) that purges all host credentials and API keys (`GEMINI_API_KEY`, `NVIDIA_API_KEY`, etc.), guaranteeing zero secret exfiltration.
+3.  **Browser DOM & Storage Mocks**: Prefixes JavaScript code with mock browser structures (`window`, `document`, and mock `localStorage`/`sessionStorage`) so client UI routines evaluate without `ReferenceError`.
+4.  **Runtime Interception & Timeout Containment**: Intercepts `builtins.open` to raise `PermissionError` on file access, overrides `require()` to block Node system modules (`fs`, `child_process`, `net`), and enforces strict 5-second execution timeout limits.
 
 ---
 

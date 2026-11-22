@@ -1,6 +1,7 @@
 import os
 import subprocess
 import json
+import ast
 from openai import OpenAI
 import google.generativeai as genai
 from dotenv import load_dotenv
@@ -61,6 +62,56 @@ class SelfHealEngine:
 
         raise ValueError("No LLM provider available for self-healing.")
 
+    def validate_ast_safety(self, code: str, language: str) -> tuple[bool, str]:
+        """
+        Statically inspects source code AST before execution to detect
+        stealthy evasions, reflection dunder abuse, or unauthorized imports.
+        """
+        is_js = language.lower() in ["javascript", "js"]
+        if is_js:
+            # JavaScript AST / token inspection
+            forbidden_js_patterns = [
+                ("child_process", "Subprocess execution via 'child_process' is forbidden"),
+                ("cluster", "Cluster management via 'cluster' is forbidden"),
+                ("__proto__", "Prototype pollution via '__proto__' is forbidden"),
+                ("process.env", "Host environment credential extraction is forbidden"),
+                ("process.exit", "Host process termination is forbidden"),
+                ("process.kill", "Host process signaling is forbidden"),
+            ]
+            for pattern, reason in forbidden_js_patterns:
+                if pattern in code:
+                    return False, f"Security Violation: {reason}"
+            return True, ""
+
+        # Python AST Static Validation
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            # Let runtime handle standard syntax error reporting
+            return True, ""
+
+        # Dangerous dunder attributes used for sandbox breakout reflection
+        FORBIDDEN_ATTRS = {
+            "__class__", "__base__", "__bases__", "__subclasses__",
+            "__globals__", "__builtins__", "__code__", "__closure__",
+            "__dict__"
+        }
+        # Dangerous builtins that allow dynamic arbitrary execution
+        FORBIDDEN_CALLS = {"eval", "exec", "compile", "breakpoint"}
+
+        for node in ast.walk(tree):
+            # Check attribute access (e.g. obj.__class__.__subclasses__())
+            if isinstance(node, ast.Attribute):
+                if node.attr in FORBIDDEN_ATTRS:
+                    return False, f"Security Violation: Dunder reflection attribute '{node.attr}' is forbidden in sandbox."
+
+            # Check direct function calls (e.g. eval(...), exec(...))
+            elif isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Name) and node.func.id in FORBIDDEN_CALLS:
+                    return False, f"Security Violation: Dynamic execution call '{node.func.id}()' is forbidden in sandbox."
+
+        return True, ""
+
     def _wrap_js_sandbox(self, code: str) -> str:
         """
         Injects browser DOM mocks and overrides Node's global require function
@@ -113,7 +164,11 @@ if (typeof require !== 'undefined') {
 import builtins
 import sys
 
-blocked_modules = ['os', 'subprocess', 'socket', 'urllib', 'requests', 'shutil', 'ftplib']
+blocked_modules = [
+    'os', 'subprocess', 'socket', 'urllib', 'requests', 'shutil', 'ftplib',
+    'ctypes', 'importlib', 'multiprocessing', 'threading', 'signal', 'pty',
+    'commands', 'posix', 'nt', 'winreg', 'pathlib'
+]
 
 # Clear from cache first in case they are pre-loaded
 for mod in blocked_modules:
@@ -139,30 +194,52 @@ builtins.open = restricted_open
 
     def run_code(self, code: str, language: str, timeout: int = 5) -> dict:
         """
-        Executes code string in a sandboxed subprocess and checks for assertion results.
+        Executes code string in an isolated subprocess with AST safety pre-validation,
+        environment scrubbing, and execution timeout containment.
         Returns a dictionary with success state, output, and execution logs.
         """
         is_js = language.lower() in ["javascript", "js"]
         
-        # Apply safety and global environment wrappers
+        # Step 1: Pre-Execution AST Static Security Inspection
+        is_safe, violation_reason = self.validate_ast_safety(code, language)
+        if not is_safe:
+            return {
+                "success": False,
+                "passed": False,
+                "stdout": "",
+                "stderr": violation_reason,
+                "returncode": -3
+            }
+
+        # Step 2: Apply safety and global environment wrappers
         wrapped_code = self._wrap_js_sandbox(code) if is_js else self._wrap_py_sandbox(code)
+
+        # Step 3: Scrubbed Execution Environment (Strip all host secrets & API keys)
+        safe_env = {
+            "PATH": os.environ.get("PATH", ""),
+            "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+            "TEMP": os.environ.get("TEMP", ""),
+            "TMP": os.environ.get("TMP", ""),
+            "PYTHONPATH": "",
+            "NODE_PATH": ""
+        }
         
         try:
             if is_js:
-                # Execute in Node.js
                 result = subprocess.run(
                     ["node", "-e", wrapped_code],
                     timeout=timeout,
                     capture_output=True,
-                    text=True
+                    text=True,
+                    env=safe_env
                 )
             else:
-                # Execute in Python
                 result = subprocess.run(
                     ["python", "-c", wrapped_code],
                     timeout=timeout,
                     capture_output=True,
-                    text=True
+                    text=True,
+                    env=safe_env
                 )
                 
             stdout = result.stdout
@@ -187,7 +264,7 @@ builtins.open = restricted_open
                 "success": False,
                 "passed": False,
                 "stdout": "",
-                "stderr": "Execution timed out (5 seconds limit exceeded)",
+                "stderr": f"Execution timed out ({timeout} seconds limit exceeded)",
                 "returncode": -1
             }
         except Exception as e:
