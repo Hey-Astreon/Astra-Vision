@@ -20,6 +20,13 @@
 
 ---
 
+## 👥 System Architects & Engineering Attribution
+
+- **Roushan Kumar** ([@Hey-Astreon](https://github.com/Hey-Astreon)) — *Creator, AST Engine & Backend Systems Developer*
+- **Ayushi Raj** ([@Ayushi507](https://github.com/Ayushi507)) — *Frontend Studio & Monaco Canvas Developer*
+
+---
+
 ## 📖 Table of Contents
 1. [Capabilities Matrix](#-capabilities-matrix-astra-vision-vs-competitors)
 2. [Interface & Features Walkthrough (For Beginners)](#-interface--features-walkthrough-for-beginners)
@@ -368,3 +375,14 @@ python test_ast_indexing.py
 # Run self-healing test assertions lifecycle
 python test_self_heal.py
 ```
+
+---
+
+## 👨‍💻 Authors & Core Contributors
+
+- **Roushan Kumar** ([@Hey-Astreon](https://github.com/Hey-Astreon)) — *Creator & Backend Systems Developer*
+- **Ayushi Raj** ([@Ayushi507](https://github.com/Ayushi507)) — *Frontend Studio & UI Developer*
+
+<div align="center">
+  <sub>Built with precision, AST determinism, and relentless dedication for the modern software developer.</sub>
+</div>
